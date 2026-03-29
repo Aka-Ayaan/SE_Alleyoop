@@ -1,28 +1,30 @@
-import mysql from 'mysql2/promise';
-import fs from 'fs';
-import dotenv from 'dotenv';
+const mysql = require('mysql2/promise');
+const fs = require('fs');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
-const { DB_HOST, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+const { DB_HOST, DB_USER, DB_PASSWORD } = process.env;
 
 async function runDDL() {
   const ddl = fs.readFileSync('./sql/alleyoop_db.sql', 'utf8');
 
-  // Connect directly to the database (must exist manually)
+  // Connect to MySQL server (database will be created/selected by the SQL file)
   const dbConn = await mysql.createConnection({
     host: DB_HOST,
     user: DB_USER,
     password: DB_PASSWORD,
-    database: DB_NAME,
-    multipleStatements: true
+    multipleStatements: true,
   });
 
   // Run full SQL file
   await dbConn.query(ddl);
   await dbConn.end();
 
-  console.log("✅ courtify_db.sql executed successfully!");
+  console.log('✅ alleyoop_db.sql executed successfully!');
 }
 
-runDDL().catch(console.error);
+runDDL().catch((err) => {
+  console.error('❌ Error running alleyoop_db.sql:', err);
+  process.exit(1);
+});
