@@ -57,9 +57,8 @@ router.get('/auth/validate', async (req, res) => {
 
     const user = results[0];
 
-    if (user.is_active === 0) {
-      return res.status(403).json({ error: 'Please verify your email first' });
-    }
+    // Temporarily allow login even if not email-verified.
+    // The is_active flag remains in the DB for future verification flows.
 
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
@@ -108,14 +107,10 @@ router.post('/auth/signup', async (req, res) => {
           return res.status(500).json({ error: 'Database insert failed' });
         }
 
-        try {
-          await sendVerificationEmail(email, token, redirectType);
-        } catch (e) {
-          console.error('Email send error:', e);
-        }
-
+        // Email verification is currently disabled for the mobile app.
+        // The user is stored with is_active = 0 for future verification flows.
         return res.status(201).json({
-          message: 'Account created. Check your email to verify.',
+          message: 'Account created successfully (email verification disabled in this build).',
         });
       });
     });
@@ -192,6 +187,52 @@ router.get('/auth/verify', (req, res) => {
       if (result.affectedRows > 0) {
         const redirectBase = process.env.FRONTEND_URL || '';
         return res.redirect(`${redirectBase}/?verified=1&type=${type}`);
+      }
+
+      tryVerify(index + 1);
+    });
+  };
+
+  tryVerify(0);
+});
+
+// =========================================================
+// AUTH: MOBILE EMAIL VERIFICATION (JSON response)
+// =========================================================
+router.get('/auth/verify-mobile', (req, res) => {
+  const { token } = req.query;
+
+  if (!token) {
+    return res.status(400).json({ success: false, error: 'Invalid verification token' });
+  }
+
+  const tables = [
+    { table: 'players', type: 'player' },
+    { table: 'arena_owners', type: 'owner' },
+    { table: 'sellers', type: 'seller' },
+    { table: 'trainers', type: 'trainer' },
+  ];
+
+  const tryVerify = (index) => {
+    if (index >= tables.length) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired token' });
+    }
+
+    const { table, type } = tables[index];
+    const query = `
+      UPDATE ${table}
+      SET is_active = 1, verification_token = NULL
+      WHERE verification_token = ?
+    `;
+
+    db.query(query, [token], (err, result) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ success: false, error: 'Server error' });
+      }
+
+      if (result.affectedRows > 0) {
+        return res.json({ success: true, userType: type });
       }
 
       tryVerify(index + 1);

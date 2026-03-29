@@ -8,8 +8,10 @@ const nodemailer = require('nodemailer');
  * @param {string} [userType] - Optional user type (player/owner/seller/trainer) for email copy only
  */
 async function sendVerificationEmail(email, token, userType) {
-  const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || '';
-  const verificationLink = `${baseUrl}/auth/verify?token=${token}`;
+  // For a pure mobile app, use a deep link instead of an HTTP URL.
+  // Example: "alleyoop://verify?token=...". Configure with D EEP_LINK_BASE if needed.
+  const deepLinkBase = process.env.DEEP_LINK_BASE || 'alleyoop://';
+  const verificationLink = `${deepLinkBase}verify?token=${token}`;
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',
