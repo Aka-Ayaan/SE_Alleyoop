@@ -32,6 +32,8 @@ export default function App() {
       )}
       {screen === 'home' && <HomeScreen user={user} onLogout={handleLogout} />}
       <StatusBar style="auto" />
+
+      {/* {screen === 'yourNewRouteName' && <YourNewScreenName />} for dubugging purposes  */}
     </SafeAreaView>
   );
 }

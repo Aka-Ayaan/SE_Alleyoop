@@ -80,7 +80,7 @@ router.get('/bookings/:userId', (req, res) => {
 });
 
 // Owner: bookings across all owned arenas
-router.get('/owner/bookings', (req, res) => {
+router.get('/bookings/owner', (req, res) => {
   const { ownerId } = req.query;
   if (!ownerId) return res.status(400).json({ error: 'Owner ID required' });
 

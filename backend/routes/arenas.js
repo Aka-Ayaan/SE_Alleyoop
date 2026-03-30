@@ -11,7 +11,7 @@ router.get('/arenas/health', (req, res) => {
 // =========================================================
 // ARENAS & COURTS
 // =========================================================
-router.get('/arenas', (req, res) => {
+router.get('/arena/get', (req, res) => {
   const query = `
     SELECT 
       a.id,
@@ -38,7 +38,7 @@ router.get('/arenas', (req, res) => {
   });
 });
 
-router.get('/arena/:id', (req, res) => {
+router.get('/arena/get/:id', (req, res) => {
   const arenaId = req.params.id;
 
   const arenaQuery = `
@@ -125,7 +125,7 @@ router.get('/arena/:id', (req, res) => {
 });
 
 // Owner creates new arena
-router.post('/arenas', (req, res) => {
+router.post('/arena/create', (req, res) => {
   const { owner_id, name, city, address, pricePerHour, timing, amenities, description, rules } = req.body;
 
   if (!owner_id || !name || !city || !pricePerHour) {
@@ -155,7 +155,7 @@ router.post('/arenas', (req, res) => {
 });
 
 // Owner: get own arenas
-router.get('/owner/arenas', (req, res) => {
+router.get('/arena/owner', (req, res) => {
   const { ownerId } = req.query;
   if (!ownerId) return res.status(400).json({ error: 'Owner ID required' });
 
@@ -175,7 +175,7 @@ router.get('/owner/arenas', (req, res) => {
 });
 
 // Owner: update arena
-router.put('/arenas/:id', (req, res) => {
+router.put('/arena/owner/:id', (req, res) => {
   const arenaId = req.params.id;
   const { name, city, address, pricePerHour, timing, amenities, description, rules, availability } = req.body;
 
@@ -199,7 +199,7 @@ router.put('/arenas/:id', (req, res) => {
 });
 
 // Owner: add court to an arena
-router.post('/courts', (req, res) => {
+router.post('/arena/courts', (req, res) => {
   const { arena_id, court_type_id, name, image_path, pricePerHour, is_indoor } = req.body;
 
   if (!arena_id || !court_type_id || !name) {
