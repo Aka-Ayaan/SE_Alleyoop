@@ -10,7 +10,6 @@ import {
   Dimensions,
   Animated,
   PanResponder,
-  // SafeAreaView,
   StatusBar,
   Platform,
 } from 'react-native';
@@ -40,169 +39,216 @@ const TABS = [
 
 // ─── Placeholder data ────────────────────────────────────────────────────────
 
-const STORIES = [
-  { id: '1', name: 'Your Story', isOwn: true },
-  { id: '2', name: 'CourtKing' },
-  { id: '3', name: 'HoopZone' },
-  { id: '4', name: 'ProArena' },
-  { id: '5', name: 'DunkPit' },
-  { id: '6', name: 'NetCity' },
-];
-
 const VENUE_POSTS = [
-  { id: 'v1', user: 'CourtKing Arena', location: 'Karachi, DHA', likes: 248, comments: 31, time: '2h', verified: true, caption: 'Full court available for booking this weekend 🏀 Air-conditioned, premium flooring.' },
-  { id: 'v2', user: 'HoopZone', location: 'Lahore, Gulberg', likes: 183, comments: 14, time: '5h', verified: false, caption: 'New 3x3 court just opened! First 10 bookings get 20% off. Come hoop with us 🔥' },
-  { id: 'v3', user: 'ProArena Clifton', location: 'Karachi, Clifton', likes: 412, comments: 57, time: '8h', verified: true, caption: 'Saturday league sign-ups are OPEN. Limited spots remaining — book your team now.' },
+  {
+    id: 'v1',
+    user: {
+      name: 'CourtKing Arena',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.8',
+      timings: '8:00 AM - 11:00 PM',
+      location: 'Karachi, DHA',
+      sports: ['Basketball', 'Tennis', 'Futsal'],
+      isAvailable: true
+    }
+  },
+  {
+    id: 'v2',
+    user: {
+      name: 'HoopZone',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.5',
+      timings: '9:00 AM - 12:00 AM',
+      location: 'Lahore, Gulberg',
+      sports: ['Basketball', '3x3'],
+      isAvailable: false
+    }
+  },
+  {
+    id: 'v3',
+    user: {
+      name: 'ProArena Clifton',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.9',
+      timings: '7:00 AM - 11:00 PM',
+      location: 'Karachi, Clifton',
+      sports: ['Tennis', 'Padel'],
+      isAvailable: true
+    }
+  },
 ];
 
 const SHOP_POSTS = [
-  { id: 's1', user: 'BallUp Store', location: 'Online', likes: 521, comments: 44, time: '1h', verified: true, caption: 'New Spalding NBA game ball just dropped 🏀 Free shipping on orders over Rs. 3000.' },
-  { id: 's2', user: 'HoopGear PK', location: 'Karachi', likes: 310, comments: 28, time: '3h', verified: false, caption: 'Custom jerseys now available! Choose your number, name, and team colors. DM to order.' },
-  { id: 's3', user: 'CourtSwag', location: 'Lahore', likes: 198, comments: 19, time: '6h', verified: false, caption: 'Nike Kyrie 9 restock — sizes 7 to 12 available. Grab yours before they sell out again 👟' },
+  {
+    id: 's1',
+    user: {
+      name: 'BallUp Store',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.7',
+      timings: '24/7 Delivery',
+      location: 'Online Store',
+      sports: ['Balls', 'Shoes', 'Jerseys'],
+      isAvailable: true
+    }
+  },
+  {
+    id: 's2',
+    user: {
+      name: 'HoopGear PK',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.2',
+      timings: '11:00 AM - 09:00 PM',
+      location: 'Karachi, LuckyOne',
+      sports: ['Apparel', 'Accessories'],
+      isAvailable: true
+    }
+  },
+  {
+    id: 's3',
+    user: {
+      name: 'CourtSwag',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.6',
+      timings: 'Closed Today',
+      location: 'Lahore, Model Town',
+      sports: ['Custom Kits', 'Socks'],
+      isAvailable: false
+    }
+  },
 ];
 
 const TRAINING_POSTS = [
-  { id: 't1', user: 'Coach Raza', location: 'Karachi', likes: 374, comments: 62, time: '30m', verified: true, caption: 'Morning drills with the U18 squad 💪 These kids are putting in the work every day.' },
-  { id: 't2', user: 'EliteHoops', location: 'Islamabad', likes: 289, comments: 35, time: '2h', verified: true, caption: 'Handles & footwork session — 2 spots open for next week. Link in bio to register.' },
-  { id: 't3', user: 'SkillLab PK', location: 'Lahore', likes: 156, comments: 21, time: '4h', verified: false, caption: 'Shooting form breakdown thread 🧵 Swipe to see the 5 most common mistakes and how to fix them.' },
+  {
+    id: 't1',
+    user: {
+      name: 'Coach Raza',
+      image: require('../../../assets/tennis.png'),
+      rating: '5.0',
+      timings: 'Morning Drills',
+      location: 'Karachi, KDA',
+      sports: ['Shooting', 'Defense'],
+      isAvailable: true
+    }
+  },
+  {
+    id: 't2',
+    user: {
+      name: 'EliteHoops',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.8',
+      timings: 'Weekend Camps',
+      location: 'Islamabad, F-10',
+      sports: ['Vertical Jump', 'IQ'],
+      isAvailable: true
+    }
+  },
+  {
+    id: 't3',
+    user: {
+      name: 'SkillLab PK',
+      image: require('../../../assets/tennis.png'),
+      rating: '4.4',
+      timings: 'Fully Booked',
+      location: 'Lahore, Johar Town',
+      sports: ['Handles', 'Footwork'],
+      isAvailable: false
+    }
+  },
 ];
 
 // ─── Subcomponents ───────────────────────────────────────────────────────────
 
-function StoryBubble({ story }) {
+function PostCard({ post }) {
+  // Destructure for cleaner code - matching your requirements
+  const {
+    name,
+    image,
+    rating,
+    timings,
+    location,
+    sports,
+    isAvailable
+  } = post.user;
+
   return (
-    <TouchableOpacity style={styles.storyItem} activeOpacity={0.8}>
-      <View style={[styles.storyRing, story.isOwn && styles.storyRingOwn]}>
-        <View style={styles.storyAvatar}>
-          {story.isOwn ? (
-            <View style={styles.storyAddBtn}>
-              <MaterialCommunityIcons name="plus" size={20} color={C.white} />
-            </View>
-          ) : (
-            <Text style={styles.storyAvatarText}>
-              {story.name.charAt(0).toUpperCase()}
-            </Text>
-          )}
+    <TouchableOpacity style={styles.venueCard} activeOpacity={0.95}>
+      {/* Upper Half: Landscape Image */}
+      <View style={styles.cardImageContainer}>
+        <Image
+          source={image} // Assumes this is a require() or {uri: ''}
+          style={styles.venueImage}
+          resizeMode="cover"
+        />
+        {/* Rating Overlay (Optional but looks pro) */}
+        <View style={styles.ratingBadge}>
+          <MaterialCommunityIcons name="star" size={14} color="#FFD700" />
+          <Text style={styles.ratingText}>{rating}</Text>
         </View>
       </View>
-      <Text style={styles.storyName} numberOfLines={1}>
-        {story.isOwn ? 'Your Story' : story.name}
-      </Text>
+
+      {/* Lower Half: Info */}
+      <View style={styles.cardContent}>
+        {/* Big Header */}
+        <Text style={styles.venueName}>{name}</Text>
+
+        {/* Info Lines */}
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="clock-outline" size={16} color={C.orange} />
+          <Text style={styles.infoText}>{timings}</Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="map-marker-outline" size={16} color={C.orange} />
+          <Text style={styles.infoText} numberOfLines={1}>{location}</Text>
+        </View>
+
+        {/* Sports Badges (Max 3) */}
+        <View style={styles.sportsContainer}>
+          {sports.slice(0, 3).map((sport, index) => (
+            <View key={index} style={styles.sportTag}>
+              <Text style={styles.sportTagText}>{sport}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Availability Section */}
+        <View style={[
+          styles.availabilityCard,
+          { backgroundColor: isAvailable ? '#E8F5E9' : '#FFEBEE' }
+        ]}>
+          <View style={[
+            styles.statusDot,
+            { backgroundColor: isAvailable ? '#4CAF50' : '#F44336' }
+          ]} />
+          <Text style={[
+            styles.availabilityText,
+            { color: isAvailable ? '#2E7D32' : '#C62828' }
+          ]}>
+            {isAvailable ? 'Available Now' : 'Fully Booked'}
+          </Text>
+        </View>
+      </View>
     </TouchableOpacity>
   );
 }
-
-function PostCard({ post }) {
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const heartScale = useRef(new Animated.Value(1)).current;
-
-  const handleLike = () => {
-    setLiked(prev => !prev);
-    Animated.sequence([
-      Animated.spring(heartScale, { toValue: 1.4, useNativeDriver: true, speed: 50 }),
-      Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, tension: 120 }),
-    ]).start();
-  };
-
-  // Generate a deterministic placeholder color from post id
-  const avatarColors = ['#E76F2E', '#2FA4D7', '#3E2C23', '#8B4513', '#D2691E'];
-  const colorIdx = post.id.charCodeAt(1) % avatarColors.length;
-
-  return (
-    <View style={styles.postCard}>
-      {/* Post header */}
-      <View style={styles.postHeader}>
-        <View style={styles.postHeaderLeft}>
-          <View style={[styles.postAvatar, { backgroundColor: avatarColors[colorIdx] }]}>
-            <Text style={styles.postAvatarText}>{post.user.charAt(0)}</Text>
-          </View>
-          <View>
-            <View style={styles.postUserRow}>
-              <Text style={styles.postUsername}>{post.user}</Text>
-              {post.verified && (
-                <MaterialCommunityIcons name="check-decagram" size={14} color={C.blue} style={{ marginLeft: 4 }} />
-              )}
-            </View>
-            <Text style={styles.postLocation}>{post.location}</Text>
-          </View>
-        </View>
-        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialCommunityIcons name="dots-horizontal" size={22} color={C.brown} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Post image placeholder */}
-      <View style={styles.postImage}>
-        <View style={styles.postImageInner}>
-          <MaterialCommunityIcons name="basketball" size={48} color={C.orange + '44'} />
-        </View>
-      </View>
-
-      {/* Action bar */}
-      <View style={styles.postActions}>
-        <View style={styles.postActionsLeft}>
-          <TouchableOpacity onPress={handleLike} style={styles.actionBtn}>
-            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-              <MaterialCommunityIcons
-                name={liked ? 'heart' : 'heart-outline'}
-                size={26}
-                color={liked ? '#E53935' : C.brown}
-              />
-            </Animated.View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn}>
-            <MaterialCommunityIcons name="comment-outline" size={26} color={C.brown} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn}>
-            <MaterialCommunityIcons name="send-outline" size={24} color={C.brown} />
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity onPress={() => setSaved(p => !p)}>
-          <MaterialCommunityIcons
-            name={saved ? 'bookmark' : 'bookmark-outline'}
-            size={26}
-            color={saved ? C.orange : C.brown}
-          />
-        </TouchableOpacity>
-      </View>
-
-      {/* Likes */}
-      <View style={styles.postMeta}>
-        <Text style={styles.postLikes}>{(post.likes + (liked ? 1 : 0)).toLocaleString()} likes</Text>
-        <Text style={styles.postCaption}>
-          <Text style={styles.postCaptionUser}>{post.user} </Text>
-          {post.caption}
-        </Text>
-        <Text style={styles.postComments}>View all {post.comments} comments</Text>
-        <Text style={styles.postTime}>{post.time} ago</Text>
-      </View>
-    </View>
-  );
-}
-
 // ─── Tab screens ─────────────────────────────────────────────────────────────
 
 function FeedScreen({ posts }) {
   return (
     <View style={styles.rootbrown}>
+      {/* Background arcs */}
+      <View style={styles.arcContainer} pointerEvents="none">
+        <View style={styles.arcOuter} />
+        <View style={styles.arcInner} />
+        <View style={styles.halfCircle} />
+      </View>
       <FlatList
         data={posts}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 90 }}
-      // ListHeaderComponent={
-      //   <ScrollView
-      //     horizontal
-      //     showsHorizontalScrollIndicator={false}
-      //     contentContainerStyle={styles.storiesRow}
-      //     style={styles.storiesContainer}
-      //   >
-      //     {STORIES.map(s => <StoryBubble key={s.id} story={s} />)}
-      //   </ScrollView>
-      // }
-      // ItemSeparatorComponent={() => <View style={styles.postSeparator} />}
-      // renderItem={({ item }) => <PostCard post={item} />}
+        ItemSeparatorComponent={() => <View style={styles.postSeparator} />}
+        renderItem={({ item }) => <PostCard post={item} />}
       />
     </View>
   );
@@ -217,10 +263,12 @@ function ProfileScreen({ onLogout, user }) {
 
   const menuItems = [
     { icon: 'account-edit-outline', label: 'Edit Profile' },
-    { icon: 'calendar-check-outline', label: 'My Bookings' },
-    { icon: 'heart-outline', label: 'Saved Venues' },
+    { icon: 'calendar-search-outline', label: 'Booking History' },
+    { icon: 'clipboard-search-outline', label: 'Training History' },
+    { icon: 'shopping-search-outline', label: 'Shopping History' },
+    { icon: 'heart-outline', label: 'Saved' },
     { icon: 'bell-outline', label: 'Notifications' },
-    { icon: 'shield-lock-outline', label: 'Privacy & Security' },
+    // { icon: 'shield-lock-outline', label: 'Privacy & Security' },
     { icon: 'help-circle-outline', label: 'Help & Support' },
   ];
 
@@ -438,6 +486,41 @@ const styles = StyleSheet.create({
     backgroundColor: C.white,
   },
 
+  arcContainer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  arcOuter: {
+    position: 'absolute',
+    top: -width * 0.35,
+    right: -width * 0.35,
+    width: width * 0.9,
+    height: width * 0.9,
+    borderRadius: width * 0.45,
+    borderWidth: 40,
+    borderColor: C.orange + '1A',
+  },
+  arcInner: {
+    position: 'absolute',
+    top: -width * 0.1,
+    right: -width * 0.15,
+    width: width * 0.55,
+    height: width * 0.55,
+    borderRadius: width * 0.275,
+    borderWidth: 20,
+    borderColor: C.brown + '12',
+  },
+  halfCircle: {
+    position: 'absolute',
+    bottom: -width * 0.5,
+    left: -width * 0.1,
+    width: width * 0.8,
+    height: width * 0.8,
+    borderRadius: width * 0.4,
+    borderWidth: 32,
+    borderColor: C.orange + '10',
+  },
+
   // ── Top bar ────────────────────────────────────────────────────────────────
   topBar: {
     flexDirection: 'row',
@@ -489,161 +572,105 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Stories ────────────────────────────────────────────────────────────────
-  storiesContainer: {
+  // ── Venue Card Styles ──────────────────────────────────────────────────────
+  venueCard: {
     backgroundColor: C.white,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  storiesRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 14,
-  },
-  storyItem: {
-    alignItems: 'center',
-    width: 66,
-  },
-  storyRing: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    borderWidth: 2.5,
-    borderColor: C.orange,
-    padding: 2,
-    marginBottom: 5,
-  },
-  storyRingOwn: {
-    borderColor: C.brown + '44',
-    borderStyle: 'dashed',
-  },
-  storyAvatar: {
-    flex: 1,
-    borderRadius: 28,
-    backgroundColor: C.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginVertical: 10,
     overflow: 'hidden',
+    // Shadow for iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    // Elevation for Android
+    elevation: 5,
   },
-  storyAvatarText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: C.brown,
+  cardImageContainer: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
   },
-  storyAddBtn: {
+  venueImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 28,
-    backgroundColor: C.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  storyName: {
-    fontSize: 11,
-    color: C.brown,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-
-  // ── Post card ──────────────────────────────────────────────────────────────
-  postCard: {
-    backgroundColor: C.white,
-  },
-  postSeparator: {
-    height: 8,
-    backgroundColor: C.bg,
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  postHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  postAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  postAvatarText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: C.white,
-  },
-  postUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  postUsername: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: C.brown,
-  },
-  postLocation: {
-    fontSize: 11,
-    color: C.mutedText,
-    marginTop: 1,
-  },
-  postImage: {
-    width,
-    height: width,
-    backgroundColor: C.bg,
-  },
-  postImageInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  postActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  postActionsLeft: {
+  ratingBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  actionBtn: {
-    padding: 4,
-    marginRight: 6,
+  ratingText: {
+    color: C.white,
+    fontSize: 12,
+    fontWeight: '700',
   },
-  postMeta: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    gap: 3,
+  cardContent: {
+    padding: 16,
   },
-  postLikes: {
-    fontSize: 13,
+  venueName: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: C.brown,
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  infoText: {
+    fontSize: 14,
+    color: C.mutedText,
+    fontWeight: '500',
+  },
+  sportsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  sportTag: {
+    backgroundColor: C.bg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  sportTagText: {
+    fontSize: 12,
     fontWeight: '700',
     color: C.brown,
   },
-  postCaption: {
-    fontSize: 13,
-    color: C.brown,
-    lineHeight: 18,
+  availabilityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
   },
-  postCaptionUser: {
-    fontWeight: '700',
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  postComments: {
-    fontSize: 13,
-    color: C.mutedText,
-    marginTop: 2,
-  },
-  postTime: {
-    fontSize: 11,
-    color: C.mutedText,
-    marginTop: 2,
+  availabilityText: {
+    fontSize: 14,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   // ── Profile ────────────────────────────────────────────────────────────────

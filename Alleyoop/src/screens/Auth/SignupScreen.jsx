@@ -172,10 +172,10 @@ export function SignupScreen({ onSwitchToLogin }) {
           >
             {/* Header */}
             <View style={styles.header}>
-              <Image
+              <Animated.Image
                 // Each '../' moves you up one folder level
-                source={require('../../../assets/top.png')}
-                style={styles.logo}
+                source={require('../../../assets/top-nobg.png')}
+                style={[styles.logo, { opacity: fadeAnim }]}
                 resizeMode="contain"
               />
               <Text style={styles.title}>Join the Squad.</Text>
