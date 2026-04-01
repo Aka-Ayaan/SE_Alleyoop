@@ -11,10 +11,13 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
+  ScrollView,
+  StatusBar
 } from 'react-native';
 import { UserTypeSelector } from '../../components/Auth/UserTypeSelector';
 import { endpoints } from '../../config/api';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -49,6 +52,7 @@ const InputField = memo(function InputField({ icon, ...props }) {
 });
 
 export function LoginScreen({ onSwitchToSignup, onLoginSuccess }) {
+  const insets = useSafeAreaInsets(); // This gets the status bar height
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [userType, setUserType] = useState('player');
@@ -108,104 +112,119 @@ export function LoginScreen({ onSwitchToSignup, onLoginSuccess }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      enabled={true}
-      style={styles.root}
-      behavior={'padding'}
-    >
-      {/* Background arcs */}
-      <View style={styles.arcContainer} pointerEvents="none">
-        <View style={styles.arcOuter} />
-        <View style={styles.arcInner} />
-        <View style={styles.halfCircle} />
-      </View>
-
-      {/* Main card */}
-      <Animated.View
-        style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <KeyboardAvoidingView
+        enabled={true}
+        style={styles.root}
+        behavior={'padding'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Image
-            // Each '../' moves you up one folder level
-            source={require('../../../assets/top.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.title}>Welcome Back.</Text>
-          <Text style={styles.subtitle}>Log in to hit the court.</Text>
+        {/* Set translucent to true so the background color can sit behind the status bar icons */}
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent={true} />
+
+        {/* Background arcs */}
+        <View style={styles.arcContainer} pointerEvents="none">
+          <View style={styles.arcOuter} />
+          <View style={styles.arcInner} />
+          <View style={styles.halfCircle} />
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <Text style={styles.fieldLabel}>I AM A</Text>
-          <UserTypeSelector value={userType} onChange={setUserType} />
-
-          <Text style={styles.fieldLabel}>EMAIL</Text>
-          <InputField
-            icon='email'
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <Text style={styles.fieldLabel}>PASSWORD</Text>
-          <InputField
-            icon='lock'
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            secureTextEntry={true}
-            autoCapitalize="none"
-          />
-
-          {error ? (
-            <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
-              <Text style={styles.errorText}>⚠  {error}</Text>
-            </Animated.View>
-          ) : null}
-
-          <TouchableOpacity
-            style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+        >
+          {/* Main card */}
+          <Animated.View
+            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            <View style={styles.loginBtnInner}>
-              {loading ? (
-                <ActivityIndicator color={C.cream} />
-              ) : (
-                <>
-                  <Text style={styles.loginBtnText}>LOG IN</Text>
-                  <View style={styles.loginBtnArrow}>
-                    <Text style={styles.loginBtnArrowText}>›</Text>
-                  </View>
-                </>
-              )}
+            {/* Header */}
+            <View style={styles.header}>
+              <Image
+                // Each '../' moves you up one folder level
+                source={require('../../../assets/top.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.title}>Welcome Back.</Text>
+              <Text style={styles.subtitle}>Log in to hit the court.</Text>
             </View>
-          </TouchableOpacity>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
+            {/* Form */}
+            <View style={styles.form}>
+              <Text style={styles.fieldLabel}>I AM A</Text>
+              <UserTypeSelector value={userType} onChange={setUserType} />
 
-          <TouchableOpacity
-            style={styles.signupBtn}
-            onPress={onSwitchToSignup}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.signupBtnText}>
-              New here?{' '}
-              <Text style={styles.signupBtnHighlight}>Create an account</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </KeyboardAvoidingView>
+              <Text style={styles.fieldLabel}>EMAIL</Text>
+              <InputField
+                icon='email'
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+
+              <Text style={styles.fieldLabel}>PASSWORD</Text>
+              <InputField
+                icon='lock'
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry={true}
+                autoCapitalize="none"
+              />
+
+              {error ? (
+                <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
+                  <Text style={styles.errorText}>⚠  {error}</Text>
+                </Animated.View>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <View style={styles.loginBtnInner}>
+                  {loading ? (
+                    <ActivityIndicator color={C.cream} />
+                  ) : (
+                    <>
+                      <Text style={styles.loginBtnText}>LOG IN</Text>
+                      <View style={styles.loginBtnArrow}>
+                        <Text style={styles.loginBtnArrowText}>›</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.signupBtn}
+                onPress={onSwitchToSignup}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.signupBtnText}>
+                  New here?{' '}
+                  <Text style={styles.signupBtnHighlight}>Create an account</Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      {/* Optional: Add bottom inset padding for iPhones with no home button */}
+      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {/* ... nav items ... */}
+      </View>
+    </View>
   );
 }
 
@@ -214,13 +233,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.bg,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 10,
   },
   logo: {
     width: 200,  // Adjust based on your image aspect ratio
     height: 100,  // Adjust accordingly
     marginBottom: -10,
-    marginLeft: -20,
+    // marginLeft: -20,
     alignSelf: 'center',
   },
   arcContainer: {
@@ -432,6 +451,11 @@ const styles = StyleSheet.create({
     color: C.brown,
     fontWeight: '800',
     textDecorationLine: 'underline',
+  },
+  scroll: {
+    paddingHorizontal: 0,
+    paddingTop: 56,
+    paddingBottom: 40,
   },
 });
 

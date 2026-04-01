@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native';
+// import { SafeAreaView } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LoginScreen } from './src/screens/Auth/LoginScreen';
 import { SignupScreen } from './src/screens/Auth/SignupScreen';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
@@ -20,7 +21,7 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaProvider style={{ flex: 1 }}>
       {screen === 'login' && (
         <LoginScreen
           onSwitchToSignup={() => setScreen('signup')}
@@ -34,6 +35,7 @@ export default function App() {
       <StatusBar style="auto" />
 
       {/* {screen === 'yourNewRouteName' && <YourNewScreenName />} for dubugging purposes  */}
-    </SafeAreaView>
+      {/* {screen === 'yourNewRouteName' && <YourNewScreenName />} */}
+    </SafeAreaProvider>
   );
 }

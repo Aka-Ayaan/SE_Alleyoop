@@ -12,10 +12,12 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { UserTypeSelector } from '../../components/Auth/UserTypeSelector';
 import { endpoints } from '../../config/api';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -50,6 +52,7 @@ const InputField = memo(function InputField({ icon, ...props }) {
 });
 
 export function SignupScreen({ onSwitchToLogin }) {
+  const insets = useSafeAreaInsets(); // This gets the status bar height
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -143,174 +146,183 @@ export function SignupScreen({ onSwitchToLogin }) {
   const showPrimarySport = userType === 'trainer';
 
   return (
-    <KeyboardAvoidingView
-      enabled={true}
-      style={styles.root}
-      behavior={'padding'}
-    >
-      {/* Background arcs */}
-      <View style={styles.arcContainer} pointerEvents="none">
-        <View style={styles.arcOuter} />
-        <View style={styles.arcInner} />
-        <View style={styles.halfCircle} />
-      </View>
-
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <KeyboardAvoidingView
+        enabled={true}
+        style={styles.root}
+        behavior={'padding'}
       >
-        <Animated.View
-          style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        {/* Set translucent to true so the background color can sit behind the status bar icons */}
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent={true} />
+
+        {/* Background arcs */}
+        <View style={styles.arcContainer} pointerEvents="none">
+          <View style={styles.arcOuter} />
+          <View style={styles.arcInner} />
+          <View style={styles.halfCircle} />
+        </View>
+
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Image
-              // Each '../' moves you up one folder level
-              source={require('../../../assets/top.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.title}>Join the Squad.</Text>
-            <Text style={styles.subtitle}>Create your account and hit the court.</Text>
-          </View>
-
-          {/* Step indicator */}
-          <View style={styles.stepBar}>
-            <View style={[styles.stepDot, styles.stepDotActive]} />
-            <View style={styles.stepLine} />
-            <View style={[styles.stepDot, styles.stepDotActive]} />
-            <View style={styles.stepLine} />
-            <View style={styles.stepDot} />
-          </View>
-
-          {/* Form */}
-          <View style={styles.form}>
-
-            <Text style={styles.sectionHeading}>ACCOUNT TYPE</Text>
-            <UserTypeSelector value={userType} onChange={setUserType} />
-
-            <View style={styles.sectionDivider} />
-            <Text style={styles.sectionHeading}>YOUR DETAILS</Text>
-
-            <Text style={styles.fieldLabel}>FULL NAME</Text>
-            <InputField icon="account" value={name} onChangeText={setName} placeholder="Your name" />
-
-            <Text style={styles.fieldLabel}>EMAIL</Text>
-            <InputField
-              icon="email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-
-            <Text style={styles.fieldLabel}>PHONE (OPTIONAL)</Text>
-            <InputField
-              icon="phone"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="Phone number"
-              keyboardType="phone-pad"
-            />
-
-            {showShopName && (
-              <>
-                <Text style={styles.fieldLabel}>SHOP NAME</Text>
-                <InputField icon="shopping" value={shopName} onChangeText={setShopName} placeholder="Your shop name" />
-              </>
-            )}
-
-            {showPrimarySport && (
-              <>
-                <Text style={styles.fieldLabel}>PRIMARY SPORT ID</Text>
-                <InputField
-                  icon="basketball"
-                  value={primarySportId}
-                  onChangeText={setPrimarySportId}
-                  placeholder="e.g. 1 for Basketball"
-                  keyboardType="numeric"
-                />
-              </>
-            )}
-
-            <View style={styles.sectionDivider} />
-            <Text style={styles.sectionHeading}>SECURITY</Text>
-
-            <Text style={styles.fieldLabel}>PASSWORD</Text>
-            <InputField
-              icon="lock"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              secureTextEntry={true}
-              autoCapitalize="none"
-            />
-
-            <Text style={styles.fieldLabel}>CONFIRM PASSWORD</Text>
-            <InputField
-              icon="lock"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="••••••••"
-              secureTextEntry={true}
-              autoCapitalize="none"
-            />
-
-            {error ? (
-              <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
-                <Text style={styles.errorText}>⚠  {error}</Text>
-              </Animated.View>
-            ) : null}
-
-            {success ? (
-              <Animated.View style={[styles.successBox, { transform: [{ scale: successScale }] }]}>
-                <Text style={styles.successText}>{success}</Text>
-              </Animated.View>
-            ) : null}
-
-            <TouchableOpacity
-              style={[styles.signupBtn, loading && styles.btnDisabled]}
-              onPress={handleSignup}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              <View style={styles.btnInner}>
-                {loading ? (
-                  <ActivityIndicator color={C.cream} />
-                ) : (
-                  <>
-                    <Text style={styles.btnText}>CREATE ACCOUNT</Text>
-                    <View style={styles.btnArrow}>
-                      <Text style={styles.btnArrowText}>›</Text>
-                    </View>
-                  </>
-                )}
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
+          <Animated.View
+            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <Image
+                // Each '../' moves you up one folder level
+                source={require('../../../assets/top.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.title}>Join the Squad.</Text>
+              <Text style={styles.subtitle}>Create your account and hit the court.</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.loginBtn}
-              onPress={onSwitchToLogin}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.loginBtnText}>
-                Already have an account?{' '}
-                <Text style={styles.loginBtnHighlight}>Log in</Text>
-              </Text>
-            </TouchableOpacity>
+            {/* Step indicator */}
+            <View style={styles.stepBar}>
+              <View style={[styles.stepDot, styles.stepDotActive]} />
+              <View style={styles.stepLine} />
+              <View style={[styles.stepDot, styles.stepDotActive]} />
+              <View style={styles.stepLine} />
+              <View style={styles.stepDot} />
+            </View>
 
-          </View>
-        </Animated.View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* Form */}
+            <View style={styles.form}>
+
+              <Text style={styles.sectionHeading}>ACCOUNT TYPE</Text>
+              <UserTypeSelector value={userType} onChange={setUserType} />
+
+              <View style={styles.sectionDivider} />
+              <Text style={styles.sectionHeading}>YOUR DETAILS</Text>
+
+              <Text style={styles.fieldLabel}>FULL NAME</Text>
+              <InputField icon="account" value={name} onChangeText={setName} placeholder="Your name" />
+
+              <Text style={styles.fieldLabel}>EMAIL</Text>
+              <InputField
+                icon="email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+
+              <Text style={styles.fieldLabel}>PHONE (OPTIONAL)</Text>
+              <InputField
+                icon="phone"
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Phone number"
+                keyboardType="phone-pad"
+              />
+
+              {showShopName && (
+                <>
+                  <Text style={styles.fieldLabel}>SHOP NAME</Text>
+                  <InputField icon="shopping" value={shopName} onChangeText={setShopName} placeholder="Your shop name" />
+                </>
+              )}
+
+              {showPrimarySport && (
+                <>
+                  <Text style={styles.fieldLabel}>PRIMARY SPORT ID</Text>
+                  <InputField
+                    icon="basketball"
+                    value={primarySportId}
+                    onChangeText={setPrimarySportId}
+                    placeholder="e.g. 1 for Basketball"
+                    keyboardType="numeric"
+                  />
+                </>
+              )}
+
+              <View style={styles.sectionDivider} />
+              <Text style={styles.sectionHeading}>SECURITY</Text>
+
+              <Text style={styles.fieldLabel}>PASSWORD</Text>
+              <InputField
+                icon="lock"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry={true}
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.fieldLabel}>CONFIRM PASSWORD</Text>
+              <InputField
+                icon="lock"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="••••••••"
+                secureTextEntry={true}
+                autoCapitalize="none"
+              />
+
+              {error ? (
+                <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
+                  <Text style={styles.errorText}>⚠  {error}</Text>
+                </Animated.View>
+              ) : null}
+
+              {success ? (
+                <Animated.View style={[styles.successBox, { transform: [{ scale: successScale }] }]}>
+                  <Text style={styles.successText}>{success}</Text>
+                </Animated.View>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.signupBtn, loading && styles.btnDisabled]}
+                onPress={handleSignup}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <View style={styles.btnInner}>
+                  {loading ? (
+                    <ActivityIndicator color={C.cream} />
+                  ) : (
+                    <>
+                      <Text style={styles.btnText}>CREATE ACCOUNT</Text>
+                      <View style={styles.btnArrow}>
+                        <Text style={styles.btnArrowText}>›</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.loginBtn}
+                onPress={onSwitchToLogin}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.loginBtnText}>
+                  Already have an account?{' '}
+                  <Text style={styles.loginBtnHighlight}>Log in</Text>
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      {/* Optional: Add bottom inset padding for iPhones with no home button */}
+      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {/* ... nav items ... */}
+      </View>
+    </View >
   );
 }
 
@@ -323,7 +335,7 @@ const styles = StyleSheet.create({
     width: 200,  // Adjust based on your image aspect ratio
     height: 100,  // Adjust accordingly
     marginBottom: -10,
-    marginLeft: -20,
+    // marginLeft: -20,
     alignSelf: 'center',
   },
   scroll: {
