@@ -125,8 +125,9 @@ router.get('/arena/get/:id', (req, res) => {
 
   const imagesQuery = `
     SELECT image_path 
-    FROM courts 
+    FROM arena_images
     WHERE arena_id = ?;
+    ORDER BY id ASC
   `;
 
   const courtsQuery = `
