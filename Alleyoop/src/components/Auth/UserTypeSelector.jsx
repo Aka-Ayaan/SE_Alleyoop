@@ -13,9 +13,9 @@ const C = {
 // All icons use MaterialCommunityIcons — names verified against the MCI icon set
 const userTypes = [
   { id: 'player', label: 'Player', icon: 'basketball' },
-  { id: 'owner', label: 'Arena Owner', icon: 'stadium-outline' },
-  { id: 'seller', label: 'Seller', icon: 'shopping-outline' },
-  { id: 'trainer', label: 'Trainer', icon: 'clipboard-text-outline' },
+  { id: 'owner', label: 'Arena Owner', icon: 'stadium' },
+  { id: 'seller', label: 'Seller', icon: 'shopping' },
+  { id: 'trainer', label: 'Trainer', icon: 'clipboard-text' },
 ];
 
 function Chip({ type, selected, onPress }) {

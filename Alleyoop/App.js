@@ -7,14 +7,34 @@ import { SignupScreen } from './src/screens/Auth/SignupScreen';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
 import { TestUploadScreen } from './src/screens/TestUploadScreen';
 import { TestCardsScreen } from './src/screens/TestCardsScreen';
+import { OwnerDashboard } from './src/screens/Home/OwnerDashboard';
+import { SellerDashboard } from './src/screens/Home/SellerDashboard';
+import { TrainerDashboard } from './src/screens/Home/TrainerDashboard';
 
 export default function App() {
-  const [screen, setScreen] = useState('login');
+  const [screen, setScreen] = useState('seller-dashboard');
   const [user, setUser] = useState(null);
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
-    setScreen('home');
+    switch (userData.userType) {
+      case 'player':
+        setScreen('home');
+        break;
+      case 'owner':
+        setScreen('owner-dashboard');
+        break;
+      case 'seller':
+        setScreen('seller-dashboard');
+        break;
+      case 'trainer':
+        setScreen('trainer-dashboard');
+        break;
+      default:
+        setScreen('home');
+        break;
+    }
+
   };
 
   const handleLogout = () => {
@@ -30,9 +50,9 @@ export default function App() {
           onLoginSuccess={handleLoginSuccess}
         />
       )}
-      {screen === 'signup' && (
-        <SignupScreen onSwitchToLogin={() => setScreen('login')} />
-      )}
+      <StatusBar style="auto" />
+      {screen === 'signup' && (<SignupScreen onSwitchToLogin={() => setScreen('login')} />)}
+      <StatusBar style="auto" />
       {screen === 'home' && <HomeScreen user={user} onLogout={handleLogout} />}
       {screen === 'testUpload' && (
         <TestUploadScreen onBack={() => setScreen('login')} />
@@ -41,6 +61,13 @@ export default function App() {
         <TestCardsScreen onBack={() => setScreen('login')} />
       )}
       <StatusBar style="auto" />
+      {screen === 'owner-dashboard' && <OwnerDashboard user={user} onLogout={handleLogout} />}
+      <StatusBar style="auto" />
+      {screen === 'seller-dashboard' && <SellerDashboard user={user} onLogout={handleLogout} />}
+      <StatusBar style="auto" />
+      {screen === 'trainer-dashboard' && <TrainerDashboard user={user} onLogout={handleLogout} />}
+      <StatusBar style="auto" />
+
       <View
         style={{
           position: 'absolute',

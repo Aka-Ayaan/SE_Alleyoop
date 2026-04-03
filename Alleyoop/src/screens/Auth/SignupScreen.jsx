@@ -222,14 +222,14 @@ export function SignupScreen({ onSwitchToLogin }) {
                 keyboardType="phone-pad"
               />
 
-              {showShopName && (
+              {/* {showShopName && (
                 <>
                   <Text style={styles.fieldLabel}>SHOP NAME</Text>
                   <InputField icon="shopping" value={shopName} onChangeText={setShopName} placeholder="Your shop name" />
                 </>
-              )}
+              )} */}
 
-              {showPrimarySport && (
+              {/* {showPrimarySport && (
                 <>
                   <Text style={styles.fieldLabel}>PRIMARY SPORT ID</Text>
                   <InputField
@@ -240,7 +240,7 @@ export function SignupScreen({ onSwitchToLogin }) {
                     keyboardType="numeric"
                   />
                 </>
-              )}
+              )} */}
 
               <View style={styles.sectionDivider} />
               <Text style={styles.sectionHeading}>SECURITY</Text>
