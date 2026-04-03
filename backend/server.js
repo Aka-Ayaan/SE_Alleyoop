@@ -19,6 +19,9 @@ const app = express();
 // Static files (assets)
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
+// Uploaded files (arena images, etc.)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use(cors());
 app.use(express.json());
 

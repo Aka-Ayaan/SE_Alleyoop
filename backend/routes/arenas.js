@@ -1,11 +1,86 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const db = require('../config/db');
 
 const router = express.Router();
 
+const arenaImagesRoot = path.join(__dirname, '..', 'uploads', 'arenas');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const arenaId = req.params.id;
+    const arenaDir = path.join(arenaImagesRoot, String(arenaId));
+
+    fs.mkdir(arenaDir, { recursive: true }, (err) => {
+      cb(err, arenaDir);
+    });
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '');
+    const safeExt = ext || '.jpg';
+    const baseName = file.fieldname === 'thumbnail'
+      ? 'thumbnail'
+      : `gallery-${Date.now()}-${Math.round(Math.random() * 10000)}`;
+
+    cb(null, `${baseName}${safeExt}`);
+  },
+});
+
+const upload = multer({ storage });
+
 // Simple health check for arenas routes
 router.get('/arenas/health', (req, res) => {
   res.json({ status: 'ok', route: 'arenas' });
+});
+
+// =========================================================
+// Image upload for arenas (thumbnail + up to 5 gallery images)
+// =========================================================
+
+router.post('/arena/:id/images', upload.fields([
+  { name: 'thumbnail', maxCount: 1 },
+  { name: 'gallery', maxCount: 5 },
+]), (req, res) => {
+  const arenaId = req.params.id;
+
+  if (!arenaId) {
+    return res.status(400).json({ error: 'Arena ID is required' });
+  }
+
+  const thumbnailFiles = (req.files && req.files.thumbnail) || [];
+  const galleryFiles = (req.files && req.files.gallery) || [];
+
+  if (thumbnailFiles.length === 0 && galleryFiles.length === 0) {
+    return res.status(400).json({ error: 'No images uploaded' });
+  }
+
+  const allFiles = [];
+
+  thumbnailFiles.forEach((file) => {
+    allFiles.push(`/uploads/arenas/${arenaId}/${file.filename}`);
+  });
+
+  galleryFiles.forEach((file) => {
+    allFiles.push(`/uploads/arenas/${arenaId}/${file.filename}`);
+  });
+
+  const values = allFiles.map((imagePath) => [arenaId, imagePath]);
+
+  const insertQuery = 'INSERT INTO arena_images (arena_id, image_path) VALUES ?';
+
+  db.query(insertQuery, [values], (err) => {
+    if (err) {
+      console.error('Error saving arena images:', err);
+      return res.status(500).json({ error: 'Database error while saving images' });
+    }
+
+    return res.status(201).json({
+      message: 'Images uploaded successfully',
+      images: allFiles,
+    });
+  });
 });
 
 // =========================================================
@@ -28,7 +103,6 @@ router.get('/arena/get', (req, res) => {
         LIMIT 1
       ) AS image_path
     FROM arenas a
-    LEFT JOIN arena_images ai ON ai.arena_id = a.id
     ORDER BY a.id DESC
   `;
 

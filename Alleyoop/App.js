@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-// import { SafeAreaView } from 'react-native';
+import { View, Button } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LoginScreen } from './src/screens/Auth/LoginScreen';
 import { SignupScreen } from './src/screens/Auth/SignupScreen';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
+import { TestUploadScreen } from './src/screens/TestUploadScreen';
+import { TestCardsScreen } from './src/screens/TestCardsScreen';
 
 export default function App() {
   const [screen, setScreen] = useState('login');
@@ -32,10 +34,27 @@ export default function App() {
         <SignupScreen onSwitchToLogin={() => setScreen('login')} />
       )}
       {screen === 'home' && <HomeScreen user={user} onLogout={handleLogout} />}
+      {screen === 'testUpload' && (
+        <TestUploadScreen onBack={() => setScreen('login')} />
+      )}
+      {screen === 'testCards' && (
+        <TestCardsScreen onBack={() => setScreen('login')} />
+      )}
       <StatusBar style="auto" />
-
-      {/* {screen === 'yourNewRouteName' && <YourNewScreenName />} for dubugging purposes  */}
-      {/* {screen === 'yourNewRouteName' && <YourNewScreenName />} */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 24,
+          left: 16,
+          right: 16,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Button title="Main App" onPress={() => setScreen('login')} />
+        <Button title="Test Upload" onPress={() => setScreen('testUpload')} />
+        <Button title="Test Cards" onPress={() => setScreen('testCards')} />
+      </View>
     </SafeAreaProvider>
   );
 }
