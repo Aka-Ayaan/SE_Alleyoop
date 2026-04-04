@@ -12,7 +12,7 @@ import { SellerDashboard } from './src/screens/Home/SellerDashboard';
 import { TrainerDashboard } from './src/screens/Home/TrainerDashboard';
 
 export default function App() {
-  const [screen, setScreen] = useState('seller-dashboard');
+  const [screen, setScreen] = useState('trainer-dashboard');
   const [user, setUser] = useState(null);
 
   const handleLoginSuccess = (userData) => {
@@ -54,9 +54,11 @@ export default function App() {
       {screen === 'signup' && (<SignupScreen onSwitchToLogin={() => setScreen('login')} />)}
       <StatusBar style="auto" />
       {screen === 'home' && <HomeScreen user={user} onLogout={handleLogout} />}
+      <StatusBar style="auto" />
       {screen === 'testUpload' && (
         <TestUploadScreen onBack={() => setScreen('login')} />
       )}
+      <StatusBar style="auto" />
       {screen === 'testCards' && (
         <TestCardsScreen onBack={() => setScreen('login')} />
       )}
@@ -68,7 +70,7 @@ export default function App() {
       {screen === 'trainer-dashboard' && <TrainerDashboard user={user} onLogout={handleLogout} />}
       <StatusBar style="auto" />
 
-      <View
+      {/* <View
         style={{
           position: 'absolute',
           bottom: 24,
@@ -81,7 +83,7 @@ export default function App() {
         <Button title="Main App" onPress={() => setScreen('login')} />
         <Button title="Test Upload" onPress={() => setScreen('testUpload')} />
         <Button title="Test Cards" onPress={() => setScreen('testCards')} />
-      </View>
+      </View> */}
     </SafeAreaProvider>
   );
 }

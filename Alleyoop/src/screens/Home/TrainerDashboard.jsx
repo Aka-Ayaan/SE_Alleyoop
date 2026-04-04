@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -12,6 +12,7 @@ import {
     PanResponder,
     StatusBar,
     Platform,
+    SectionList,
     Touchable,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -39,120 +40,21 @@ const TABS = [
 
 // ─── Placeholder data ────────────────────────────────────────────────────────
 
-const VENUE_POSTS = [
+const SESSIONS_DATA = [
     {
-        id: 'v1',
-        user: {
-            name: 'CourtKing Arena',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.8',
-            timings: '8:00 AM - 11:00 PM',
-            location: 'Karachi, DHA',
-            sports: ['Basketball', 'Tennis', 'Futsal'],
-            isAvailable: true
-        }
+        title: 'Today',
+        data: [
+            { id: 's1', trainee: 'Ahmed Khan', time: '04:00 PM - 05:00 PM', coach: 'Coach Salman', type: 'Private Session', status: 'Confirmed', price: 'Rs. 3,500' },
+            { id: 's2', trainee: 'Sara Williams', time: '06:00 PM - 07:30 PM', coach: 'Coach Maria', type: 'Group Clinic', status: 'Confirmed', price: 'Rs. 1,500' },
+        ],
     },
     {
-        id: 'v2',
-        user: {
-            name: 'HoopZone',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.5',
-            timings: '9:00 AM - 12:00 AM',
-            location: 'Lahore, Gulberg',
-            sports: ['Basketball', '3x3'],
-            isAvailable: false
-        }
-    },
-    {
-        id: 'v3',
-        user: {
-            name: 'ProArena Clifton',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.9',
-            timings: '7:00 AM - 11:00 PM',
-            location: 'Karachi, Clifton',
-            sports: ['Tennis', 'Padel'],
-            isAvailable: true
-        }
-    },
-];
-
-const SHOP_POSTS = [
-    {
-        id: 's1',
-        user: {
-            name: 'BallUp Store',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.7',
-            timings: '24/7 Delivery',
-            location: 'Online Store',
-            sports: ['Balls', 'Shoes', 'Jerseys'],
-            isAvailable: true
-        }
-    },
-    {
-        id: 's2',
-        user: {
-            name: 'HoopGear PK',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.2',
-            timings: '11:00 AM - 09:00 PM',
-            location: 'Karachi, LuckyOne',
-            sports: ['Apparel', 'Accessories'],
-            isAvailable: true
-        }
-    },
-    {
-        id: 's3',
-        user: {
-            name: 'CourtSwag',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.6',
-            timings: 'Closed Today',
-            location: 'Lahore, Model Town',
-            sports: ['Custom Kits', 'Socks'],
-            isAvailable: false
-        }
-    },
-];
-
-const TRAINING_POSTS = [
-    {
-        id: 't1',
-        user: {
-            name: 'Coach Raza',
-            image: require('../../../assets/tennis.png'),
-            rating: '5.0',
-            timings: 'Morning Drills',
-            location: 'Karachi, KDA',
-            sports: ['Shooting', 'Defense'],
-            isAvailable: true
-        }
-    },
-    {
-        id: 't2',
-        user: {
-            name: 'EliteHoops',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.8',
-            timings: 'Weekend Camps',
-            location: 'Islamabad, F-10',
-            sports: ['Vertical Jump', 'IQ'],
-            isAvailable: true
-        }
-    },
-    {
-        id: 't3',
-        user: {
-            name: 'SkillLab PK',
-            image: require('../../../assets/tennis.png'),
-            rating: '4.4',
-            timings: 'Fully Booked',
-            location: 'Lahore, Johar Town',
-            sports: ['Handles', 'Footwork'],
-            isAvailable: false
-        }
+        title: 'Upcoming',
+        data: [
+            { id: 's3', trainee: 'Zain Malik', time: 'Oct 24, 05:00 PM', coach: 'Coach Salman', type: 'Strength & Conditioning', status: 'Pending', price: 'Rs. 2,000' },
+            { id: 's4', trainee: 'Hamza Ali', time: 'Oct 25, 08:00 PM', coach: 'Coach Alex', type: 'Basketball Skills', status: 'Confirmed', price: 'Rs. 3,000' },
+            { id: 's5', trainee: 'Omar J.', time: 'Oct 26, 06:00 PM', coach: 'Coach Maria', type: 'Private Session', status: 'Confirmed', price: 'Rs. 3,500' },
+        ],
     },
 ];
 
@@ -199,20 +101,113 @@ function DashboardScreen() {
     );
 }
 
-function TrainingsScreen({ posts }) {
-    return (
-        <View style={styles.rootbrown}>
-            {/* Background arcs */}
-            <View style={styles.arcContainer} pointerEvents="none">
-                <View style={styles.arcOuter} />
-                <View style={styles.arcInner} />
-                <View style={styles.halfCircle} />
+function TrainingsScreen() {
+    // 1. States for filtering
+    const [statusFilter, setStatusFilter] = useState('All');
+    const [typeFilter, setTypeFilter] = useState('All');
+    const [timeFilter, setTimeFilter] = useState('All'); // All, Today, Upcoming
+
+    // 2. Extract unique types for the filter list
+    const uniqueTypes = ['All', ...new Set(SESSIONS_DATA.flatMap(s => s.data.map(item => item.type)))];
+    const statuses = ['All', 'Confirmed', 'Pending'];
+    const timeOptions = ['All', 'Today', 'Upcoming'];
+
+    // 3. Filter Logic
+    const filteredSections = useMemo(() => {
+        return SESSIONS_DATA.map(section => {
+            if (timeFilter !== 'All' && section.title !== timeFilter) {
+                return { ...section, data: [] };
+            }
+
+            const filteredData = section.data.filter(session => {
+                const statusMatch = statusFilter === 'All' || session.status === statusFilter;
+                const typeMatch = typeFilter === 'All' || session.type === typeFilter;
+                return statusMatch && typeMatch;
+            });
+
+            return { ...section, data: filteredData };
+        }).filter(section => section.data.length > 0);
+    }, [statusFilter, typeFilter, timeFilter]);
+
+    const FilterGroup = ({ label, options, current, setter, icon }) => (
+        <View style={styles.filterGroup}>
+            <View style={styles.filterLabelRow}>
+                <MaterialCommunityIcons name={icon} size={14} color={C.white} />
+                <Text style={styles.filterGroupLabel}>{label}</Text>
             </View>
-            <FlatList
-                data={posts}
-                keyExtractor={item => item.id}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 90 }}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                {options.map(opt => (
+                    <TouchableOpacity
+                        key={opt}
+                        onPress={() => setter(opt)}
+                        style={[styles.filterChip, current === opt && styles.filterChipActive]}
+                    >
+                        <Text style={[styles.filterChipText, current === opt && styles.filterChipTextActive]}>
+                            {opt}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+        </View>
+    );
+
+    const renderSessionCard = ({ item }) => (
+        <TouchableOpacity style={styles.sessionCard} activeOpacity={0.8}>
+            <View style={styles.sessionInfo}>
+                <View style={styles.sessionHeader}>
+                    <Text style={styles.traineeName}>{item.trainee}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: item.status === 'Confirmed' ? '#E8F5E9' : '#FFF3E0' }]}>
+                        <Text style={[styles.statusText, { color: item.status === 'Confirmed' ? '#2E7D32' : '#EF6C00' }]}>
+                            {item.status}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Session Type & Coach Info */}
+                <View style={styles.sessionDetailRow}>
+                    <MaterialCommunityIcons name="whistle-outline" size={14} color={C.brown + '99'} />
+                    <Text style={styles.sessionDetailText}>{item.type} • <Text style={styles.coachText}>{item.coach}</Text></Text>
+                </View>
+
+                {/* Time Info */}
+                <View style={styles.sessionDetailRow}>
+                    <MaterialCommunityIcons name="clock-check-outline" size={14} color={C.orange} />
+                    <Text style={styles.sessionTimeText}>{item.time}</Text>
+                </View>
+            </View>
+            <View style={styles.sessionPriceAction}>
+                <Text style={styles.sessionPrice}>{item.price}</Text>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={C.brown + '44'} />
+            </View>
+        </TouchableOpacity>
+    );
+
+    return (
+        <View style={styles.rootContainer}>
+            <View style={styles.filterContainer}>
+                <FilterGroup label="Status" options={statuses} current={statusFilter} setter={setStatusFilter} icon="filter-variant" />
+                <FilterGroup label="Session Type" options={uniqueTypes} current={typeFilter} setter={setTypeFilter} icon="run-fast" />
+                <FilterGroup label="Timeline" options={timeOptions} current={timeFilter} setter={setTimeFilter} icon="calendar-clock" />
+            </View>
+
+            <SectionList
+                sections={filteredSections}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.sessionListContent}
+                renderSectionHeader={({ section: { title } }) => (
+                    <View style={styles.sectionHeaderContainer}>
+                        <View style={styles.sectionLine} />
+                        <Text style={styles.sectionTitle}>{title}</Text>
+                        <View style={styles.sectionLine} />
+                    </View>
+                )}
+                renderItem={renderSessionCard}
+                ListEmptyComponent={
+                    <View style={styles.emptyState}>
+                        <MaterialCommunityIcons name="calendar-remove-outline" size={60} color={C.white + '33'} />
+                        <Text style={styles.emptyStateText}>No sessions found</Text>
+                    </View>
+                }
             />
         </View>
     );
@@ -335,8 +330,8 @@ export function TrainerDashboard({ user, onLogout }) {
     const currentTab = TABS[activeTab];
 
     const tabContent = [
-        <DashboardScreen key="dashboard" posts={VENUE_POSTS} />,
-        <TrainingsScreen key="trainings" posts={SHOP_POSTS} />,
+        <DashboardScreen key="dashboard" />,
+        <TrainingsScreen key="trainings" />,
         <ProfileScreen key="profile" onLogout={onLogout} user={user} />,
     ];
 
@@ -529,7 +524,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 
-    // ── Venue Card Styles ──────────────────────────────────────────────────────
+    // ── Dashboard Card Styles ──────────────────────────────────────────────────────
     scrollContent: {
         paddingTop: 80,
         paddingHorizontal: 20,
@@ -754,6 +749,159 @@ const styles = StyleSheet.create({
     navLabelActive: {
         color: C.orange,
         fontWeight: '800',
+    },
+
+    // ── Trainings Screen ─────────────────────────────────────────────────────────────
+
+    rootContainer: {
+        flex: 1,
+        backgroundColor: C.brown,
+    },
+    sessionListContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 100,
+    },
+    sectionHeaderContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 15,
+        marginTop: 25,
+    },
+    sectionTitle: {
+        color: C.white,
+        fontSize: 14,
+        fontWeight: '800',
+        marginHorizontal: 15,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    sectionLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: C.white + '33',
+    },
+    sessionCard: {
+        backgroundColor: C.white,
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    sessionInfo: {
+        flex: 1,
+    },
+    sessionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    traineeName: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: C.brown,
+    },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    statusText: {
+        fontSize: 10,
+        fontWeight: '800',
+        textTransform: 'uppercase',
+    },
+    sessionDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        gap: 6,
+    },
+    sessionDetailText: {
+        fontSize: 14,
+        color: C.brown + '99',
+    },
+    coachText: {
+        fontWeight: '700',
+        color: C.brown,
+    },
+    sessionTimeText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: C.orange,
+    },
+    sessionPriceAction: {
+        alignItems: 'flex-end',
+        gap: 8,
+        marginLeft: 10,
+    },
+    sessionPrice: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: C.brown,
+    },
+    filterContainer: {
+        backgroundColor: C.brown,
+        paddingBottom: 15,
+        paddingTop: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: C.white + '1A',
+    },
+    filterGroup: {
+        marginBottom: 8,
+    },
+    filterLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        gap: 5,
+        marginBottom: 8,
+    },
+    filterGroupLabel: {
+        color: C.white,
+        fontSize: 12,
+        fontWeight: '700',
+        opacity: 0.6,
+        textTransform: 'uppercase',
+    },
+    filterScroll: {
+        paddingHorizontal: 20,
+        gap: 8,
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 20,
+        backgroundColor: C.white + '1A',
+        borderWidth: 1,
+        borderColor: C.white + '1A',
+    },
+    filterChipActive: {
+        backgroundColor: C.orange,
+        borderColor: C.orange,
+    },
+    filterChipText: {
+        color: C.white,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    filterChipTextActive: {
+        color: C.white,
+    },
+    emptyState: {
+        alignItems: 'center',
+        marginTop: 60,
+    },
+    emptyStateText: {
+        color: C.white + '88',
+        fontSize: 16,
+        marginTop: 15,
     },
 });
 
