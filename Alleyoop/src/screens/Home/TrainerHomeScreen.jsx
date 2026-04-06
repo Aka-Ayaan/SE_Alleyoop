@@ -73,9 +73,16 @@ function SubScreenContent({ type, id, data, onBack }) {
 
     return (
         <View style={styles.formContainer}>
+
+            <View style={styles.arcContainer} pointerEvents="none">
+                <View style={styles.arcInner} />
+                <View style={styles.halfCircle} />
+            </View>
+
             <View style={styles.formHeader}>
                 <Text style={styles.formTitle}>{getTitle()}</Text>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll}>
                 <View style={styles.placeholderForm}>
                     <MaterialCommunityIcons
@@ -1007,9 +1014,8 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     placeholderForm: {
-        alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 60,
+        paddingTop: 10,
     },
     placeholderText: {
         marginTop: 20,

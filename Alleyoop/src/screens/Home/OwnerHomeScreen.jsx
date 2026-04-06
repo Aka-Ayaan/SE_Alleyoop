@@ -1,11 +1,10 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, memo } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     ScrollView,
-    FlatList,
     Image,
     Dimensions,
     Animated,
@@ -13,10 +12,17 @@ import {
     StatusBar,
     Platform,
     SectionList,
+    KeyboardAvoidingView,
+    Switch,
+    TextInput,
     Touchable,
+    Modal,
+    FlatList,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width, height } = Dimensions.get('window');
 
@@ -58,9 +64,185 @@ const BOOKINGS_DATA = [
     },
 ];
 
+// ─── Form Inputs ─────────────────────────────────────────────────────────────
+
+const FormInput = memo(({ label, value, onChangeText, placeholder, ...props }) => (
+    <View style={styles.inputGroup}>
+        <Text style={styles.label}>{label}</Text>
+        <TextInput
+            style={styles.input}
+            placeholder={placeholder}
+            value={value}
+            onChangeText={onChangeText}
+            placeholderTextColor={C.mutedText}
+            {...props}
+        />
+    </View>
+));
+
+const SportDropdown = memo(({ selectedSports, onToggleSport }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const allSports = ['Basketball', 'Tennis', 'Futsal', 'Padel', 'Cricket', 'Badminton', '3x3'];
+
+    return (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>Select Sports</Text>
+            <TouchableOpacity
+                style={styles.dropdownHeader}
+                onPress={() => setIsOpen(!isOpen)}
+                activeOpacity={0.8}
+            >
+                <Text style={selectedSports.length ? styles.dropdownHeaderText : styles.placeholderText}>
+                    {selectedSports.length ? selectedSports.join(', ') : 'Choose sports...'}
+                </Text>
+                <MaterialCommunityIcons name={isOpen ? "chevron-up" : "chevron-down"} size={20} color={C.brown} paddingTop={20} />
+            </TouchableOpacity>
+
+            {isOpen && (
+                <View style={styles.dropdownList}>
+                    {allSports.map(sport => {
+                        const isSelected = selectedSports.includes(sport);
+                        return (
+                            <TouchableOpacity
+                                key={sport}
+                                style={[styles.sportItem, isSelected && styles.sportItemActive]}
+                                onPress={() => onToggleSport(sport)}
+                            >
+                                <Text style={[styles.sportItemText, isSelected && styles.sportItemTextActive]}>{sport}</Text>
+                                {isSelected && <MaterialCommunityIcons name="check" size={16} color={C.white} />}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            )}
+        </View>
+    );
+});
+
 // ─── Tab screens ─────────────────────────────────────────────────────────────
 
+function AddVenueForm({ onBack, onSave }) {
+    const [name, setName] = useState('');
+    const [location, setLocation] = useState('');
+    const [image, setImage] = useState(null);
+    const [selectedSports, setSelectedSports] = useState([]);
+    const [isAvailable, setIsAvailable] = useState(true);
+
+    // Time Picker States
+    const [startTime, setStartTime] = useState(new Date(new Date().setHours(8, 0, 0)));
+    const [endTime, setEndTime] = useState(new Date(new Date().setHours(23, 0, 0)));
+    const [showPicker, setShowPicker] = useState(null); // 'start' or 'end'
+
+    const onToggleSport = useCallback((sport) => {
+        setSelectedSports(prev =>
+            prev.includes(sport) ? prev.filter(s => s !== sport) : [...prev, sport]
+        );
+    }, []);
+
+    const formatTime = (date) => {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    };
+
+    const pickImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: 'images',
+            allowsEditing: true,
+            aspect: [16, 9],
+            quality: 0.7,
+        });
+        if (!result.canceled) setImage(result.assets[0].uri);
+    };
+
+    const handleSave = () => {
+        if (!name || !location || !image || selectedSports.length === 0) {
+            alert('Please fill all fields, select at least one sport, and add an image.');
+            return;
+        }
+
+        const newVenue = {
+            id: Date.now().toString(),
+            user: {
+                name,
+                image: { uri: image },
+                rating: '5.0',
+                timings: `${formatTime(startTime)} - ${formatTime(endTime)}`,
+                location,
+                sports: selectedSports,
+                isAvailable
+            }
+        };
+        onSave(newVenue);
+    };
+
+    return (
+        <KeyboardAvoidingView padding={'height'} style={styles.formContainer}>
+            <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <Text style={styles.sectionLabel}>Venue Display Image</Text>
+                <TouchableOpacity style={styles.imagePickerFrame} onPress={pickImage}>
+                    {image ? <Image source={{ uri: image }} style={styles.previewImage} /> : (
+                        <View style={styles.imagePlaceholder}>
+                            <MaterialCommunityIcons name="camera-plus" size={40} color={C.brown + '44'} />
+                            <Text style={styles.placeholderText}>Upload Landscape Photo</Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
+
+                <FormInput label="Venue Name" value={name} onChangeText={setName} placeholder="e.g. CourtKing Arena" />
+                <FormInput label="Location" value={location} onChangeText={setLocation} placeholder="e.g. Karachi, DHA" />
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Operating Hours</Text>
+                    <View style={styles.timeRow}>
+                        <TouchableOpacity style={styles.timeButton} onPress={() => setShowPicker('start')}>
+                            <Text style={styles.timeLabel}>From</Text>
+                            <Text style={styles.timeValue}>{formatTime(startTime)}</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.timeDivider} />
+
+                        <TouchableOpacity style={styles.timeButton} onPress={() => setShowPicker('end')}>
+                            <Text style={styles.timeLabel}>To</Text>
+                            <Text style={styles.timeValue}>{formatTime(endTime)}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <SportDropdown selectedSports={selectedSports} onToggleSport={onToggleSport} />
+
+                {/* <View style={styles.rowBetween}>
+                    <View>
+                        <Text style={styles.label}>Currently Available?</Text>
+                        <Text style={styles.subLabel}>Show users if court is open</Text>
+                    </View>
+                    <Switch value={isAvailable} onValueChange={setIsAvailable} trackColor={{ false: '#767577', true: C.orange }} />
+                </View> */}
+
+                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                    <Text style={styles.saveButtonText}>Create Venue</Text>
+                </TouchableOpacity>
+
+                {showPicker && (
+                    <DateTimePicker
+                        value={showPicker === 'start' ? startTime : endTime}
+                        mode="time"
+                        is24Hour={false}
+                        display="default"
+                        onChange={(event, selectedDate) => {
+                            setShowPicker(null);
+                            if (selectedDate) {
+                                showPicker === 'start' ? setStartTime(selectedDate) : setEndTime(selectedDate);
+                            }
+                        }}
+                    />
+                )}
+            </ScrollView>
+        </KeyboardAvoidingView >
+    );
+}
+
 function SubScreenContent({ type, id, data, onBack }) {
+    const insets = useSafeAreaInsets(); // This gets the status bar height
+
     // Labels for the sub-screens
     const getTitle = () => {
         if (type === 'venue') {
@@ -72,26 +254,37 @@ function SubScreenContent({ type, id, data, onBack }) {
     };
 
     return (
-        <View style={styles.formContainer}>
+        <View style={[styles.formContainer, { paddingBottom: Math.max(insets.bottom, 20) + 5 }]}>
+
+            <View style={styles.arcContainer} pointerEvents="none">
+                <View style={styles.arcInner} />
+                <View style={styles.halfCircle} />
+            </View>
+
             <View style={styles.formHeader}>
                 <Text style={styles.formTitle}>{getTitle()}</Text>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll}>
                 <View style={styles.placeholderForm}>
-                    <MaterialCommunityIcons
-                        name={type === 'booking' ? "calendar-text" : type === 'profile' ? "account-cog" : "form-select"}
-                        size={80}
-                        color={C.orange + '22'}
+                    <AddVenueForm
+                        onBack={() => setActiveAction(null)}
+                        onSave={(newVenue) => {
+                            console.log("New Venue Object Ready:", newVenue);
+                            // Here you would call your backend API to save it
+                            setActiveAction(null);
+                        }}
                     />
-                    <Text style={styles.placeholderText}>
-                        {type === 'booking' ? `Viewing booking for: ${data?.customer}` : `Interface for ${getTitle()}`}
-                    </Text>
+                    <View style={styles.divider}>
+                        <View style={styles.dividerLine} />
+                        <View style={styles.dividerLine} />
+                    </View>
 
-                    {/* Example Action Button */}
                     <TouchableOpacity style={styles.submitBtn} onPress={onBack}>
                         <Text style={styles.submitBtnText}>Done</Text>
                     </TouchableOpacity>
                 </View>
+
             </ScrollView>
         </View>
     );
@@ -1004,13 +1197,41 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: C.orange,
     },
-    formScroll: {
-        padding: 20,
-    },
+    formContainer: { flex: 1, backgroundColor: 'transparent' },
+    formScroll: { padding: 20, paddingBottom: 10 },
+    sectionLabel: { fontSize: 13, fontWeight: '800', color: C.brown, marginBottom: 10, textTransform: 'uppercase' },
+    imagePickerFrame: { width: '100%', height: 180, borderRadius: 16, backgroundColor: C.bg, borderWidth: 2, borderColor: C.border, borderStyle: 'dashed', overflow: 'hidden', marginBottom: 25 },
+    previewImage: { width: '100%', height: '100%' },
+    imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    inputGroup: { marginBottom: 20 },
+    label: { fontSize: 15, fontWeight: '700', color: C.brown, marginBottom: 8 },
+    subLabel: { fontSize: 12, color: C.mutedText },
+    input: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: C.brown },
+    placeholderText: { color: C.brown + '66', fontWeight: '500' },
+
+    // Dropdown
+    dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 15, paddingTop: -20 },
+    dropdownHeaderText: { color: C.brown, fontWeight: '600' },
+    dropdownList: { marginTop: 5, backgroundColor: '#F8F9FA', borderRadius: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+    sportItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: C.border },
+    sportItemActive: { backgroundColor: C.orange },
+    sportItemText: { color: C.brown, fontWeight: '500' },
+    sportItemTextActive: { color: C.white, fontWeight: '700' },
+
+    // Time
+    timeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FA', borderRadius: 12, borderWidth: 1, borderColor: C.border },
+    timeButton: { flex: 1, padding: 12, alignItems: 'center' },
+    timeLabel: { fontSize: 10, color: C.mutedText, textTransform: 'uppercase', marginBottom: 2 },
+    timeValue: { fontSize: 16, fontWeight: '700', color: C.brown },
+    timeDivider: { width: 1, height: 30, backgroundColor: C.border },
+
+    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border, marginBottom: 30 },
+    saveButton: { backgroundColor: C.brown, borderRadius: 14, paddingVertical: 16, alignItems: 'center', elevation: 4 },
+    saveButtonText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+
     placeholderForm: {
-        alignItems: 'center',
+        paddingTop: 10,
         justifyContent: 'center',
-        paddingVertical: 60,
     },
     placeholderText: {
         marginTop: 20,
@@ -1031,6 +1252,25 @@ const styles = StyleSheet.create({
         color: C.white,
         fontWeight: 'bold',
         fontSize: 16,
+    },
+
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 20,
+        marginBottom: 4,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: C.brown + '22',
+    },
+    dividerText: {
+        color: C.brown + '66',
+        fontSize: 12,
+        fontWeight: '600',
+        marginHorizontal: 12,
+        letterSpacing: 1,
     },
 });
 

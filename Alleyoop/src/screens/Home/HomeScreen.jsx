@@ -118,7 +118,15 @@ function PostCard({ post, onPress }) {
 function SubScreenContent({ type, data, id, onBack }) {
   return (
     <View style={styles.subScreenRoot}>
+
+      <View style={styles.arcContainer} pointerEvents="none">
+        <View style={styles.arcOuter} />
+        <View style={styles.arcInner} />
+        <View style={styles.halfCircle} />
+      </View>
+
       <ScrollView contentContainerStyle={styles.formScroll}>
+
         <View style={styles.placeholderForm}>
           <MaterialCommunityIcons
             name={type === 'profile' ? "cog" : "information-outline"}
@@ -160,7 +168,9 @@ function FeedScreen({ posts, type, onSelect }) {
   return (
     <View style={styles.rootbrown}>
       <View style={styles.arcContainer} pointerEvents="none">
-        <View style={styles.arcOuter} /><View style={styles.arcInner} /><View style={styles.halfCircle} />
+        <View style={styles.arcOuter} />
+        <View style={styles.arcInner} />
+        <View style={styles.halfCircle} />
       </View>
 
       <FilterGroup options={filterOptions} current={filter} setter={setFilter} />
@@ -378,6 +388,41 @@ const styles = StyleSheet.create({
   rootbrown: {
     flex: 1,
     backgroundColor: C.brown
+  },
+
+  arcContainer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  arcOuter: {
+    position: 'absolute',
+    top: -width * 0.35,
+    right: -width * 0.35,
+    width: width * 0.9,
+    height: width * 0.9,
+    borderRadius: width * 0.45,
+    borderWidth: 40,
+    borderColor: C.orange + '1A',
+  },
+  arcInner: {
+    position: 'absolute',
+    top: -width * 0.1,
+    right: -width * 0.15,
+    width: width * 0.55,
+    height: width * 0.55,
+    borderRadius: width * 0.275,
+    borderWidth: 20,
+    borderColor: C.brown + '12',
+  },
+  halfCircle: {
+    position: 'absolute',
+    bottom: -width * 0.5,
+    left: -width * 0.1,
+    width: width * 0.8,
+    height: width * 0.8,
+    borderRadius: width * 0.4,
+    borderWidth: 32,
+    borderColor: C.orange + '10',
   },
 
   // Top Bar
