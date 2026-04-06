@@ -371,62 +371,227 @@ export function HomeScreen({ user, onLogout }) {
 }
 
 const styles = StyleSheet.create({
-  rootwhite: { flex: 1, backgroundColor: C.white },
-  rootbrown: { flex: 1, backgroundColor: C.brown },
+  rootwhite: {
+    flex: 1,
+    backgroundColor: C.white
+  },
+  rootbrown: {
+    flex: 1,
+    backgroundColor: C.brown
+  },
 
   // Top Bar
   topBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, backgroundColor: C.white, borderBottomWidth: 1, borderBottomColor: C.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
     height: 60, paddingBottom: 5,
   },
-  topBarSide: { width: 80, justifyContent: 'center' },
-  topBarCenter: { flex: 1, alignItems: 'center' },
-  topBarTitle: { fontSize: 16, fontWeight: '800', color: C.brown },
-  logoImage: { width: 120, height: 40 },
-  topBarAction: { alignItems: 'flex-end' },
+  topBarSide: {
+    width: 80,
+    justifyContent: 'center'
+  },
+  topBarCenter: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  topBarTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.brown
+  },
+  logoImage: {
+    width: 120,
+    height: 40
+  },
+  topBarAction: {
+    alignItems: 'flex-end'
+  },
 
-  headerBackButton: { flexDirection: 'row', alignItems: 'center', marginLeft: -10 },
-  headerBackText: { fontSize: 16, fontWeight: '600', color: C.brown, marginLeft: -6 },
+  headerBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: -10
+  },
+  headerBackText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: C.brown, marginLeft: -6
+  },
 
   // Content
-  contentArea: { flex: 1, overflow: 'hidden' },
-  tabsStrip: { flexDirection: 'row', width: width * 4, flex: 1 },
-  tabPane: { width, flex: 1 },
+  contentArea: {
+    flex: 1,
+    overflow: 'hidden'
+  },
+  tabsStrip: {
+    flexDirection: 'row',
+    width: width * 4, flex: 1
+  },
+  tabPane: {
+    width,
+    flex: 1
+  },
 
   // Filters
-  filterContainer: { backgroundColor: C.brown, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.white + '1A' },
-  filterScroll: { paddingHorizontal: 16, gap: 8 },
-  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: C.white + '15', borderWidth: 1, borderColor: C.white + '1A' },
-  filterChipActive: { backgroundColor: C.orange, borderColor: C.orange },
-  filterChipText: { color: C.white, fontSize: 13, fontWeight: '600' },
-  filterChipTextActive: { color: C.white },
+  filterContainer: {
+    backgroundColor: C.brown,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.white + '1A'
+  },
+  filterScroll: {
+    paddingHorizontal: 16,
+    gap: 8
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: C.white + '15',
+    borderWidth: 1,
+    borderColor: C.white + '1A'
+  },
+  filterChipActive: {
+    backgroundColor: C.orange,
+    borderColor: C.orange
+  },
+  filterChipText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: '600'
+  },
+  filterChipTextActive: {
+    color: C.white
+  },
 
   // Cards
-  venueCard: { backgroundColor: C.white, borderRadius: 16, marginHorizontal: 16, marginVertical: 10, elevation: 4, overflow: 'hidden' },
-  cardImageContainer: { width: '100%', height: 160 },
-  venueImage: { width: '100%', height: '100%' },
-  ratingBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 5, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingText: { color: C.white, fontSize: 12, fontWeight: '700' },
-  cardContent: { padding: 16 },
-  venueName: { fontSize: 20, fontWeight: '900', color: C.brown, marginBottom: 8 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  infoText: { fontSize: 13, color: C.mutedText },
-  sportsContainer: { flexDirection: 'row', gap: 6, marginVertical: 12 },
-  sportTag: { backgroundColor: C.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  sportTagText: { fontSize: 11, fontWeight: '700', color: C.brown },
-  availabilityCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 10, gap: 6 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  availabilityText: { fontSize: 12, fontWeight: '800' },
+  venueCard: {
+    backgroundColor: C.white,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginVertical: 10,
+    elevation: 4,
+    overflow: 'hidden'
+  },
+  cardImageContainer: {
+    width: '100%',
+    height: 160
+  },
+  venueImage: {
+    width: '100%',
+    height: '100%'
+  },
+  ratingBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 5,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  ratingText: {
+    color: C.white,
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  cardContent: {
+    padding: 16
+  },
+  venueName: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: C.brown,
+    marginBottom: 8
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4
+  },
+  infoText: {
+    fontSize: 13,
+    color: C.mutedText
+  },
+  sportsContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    marginVertical: 12
+  },
+  sportTag: {
+    backgroundColor: C.bg,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  sportTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.brown
+  },
+  availabilityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3
+  },
+  availabilityText: {
+    fontSize: 12,
+    fontWeight: '800'
+  },
 
   // SubScreen
-  subScreenRoot: { flex: 1, backgroundColor: C.white },
-  formScroll: { padding: 20 },
-  placeholderForm: { alignItems: 'center', marginTop: 40 },
-  subScreenTitle: { fontSize: 24, fontWeight: '900', color: C.brown, marginTop: 20 },
-  placeholderText: { textAlign: 'center', color: C.mutedText, marginTop: 10, fontSize: 16 },
-  submitBtn: { marginTop: 30, backgroundColor: C.brown, paddingHorizontal: 30, paddingVertical: 15, borderRadius: 12, width: '100%', alignItems: 'center' },
-  submitBtnText: { color: C.white, fontWeight: 'bold' },
+  subScreenRoot: {
+    flex: 1,
+    backgroundColor: C.white
+  },
+  formScroll: {
+    padding: 20
+  },
+  placeholderForm: {
+    alignItems: 'center',
+    marginTop: 40
+  },
+  subScreenTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: C.brown,
+    marginTop: 20
+  },
+  placeholderText: {
+    textAlign: 'center',
+    color: C.mutedText,
+    marginTop: 10,
+    fontSize: 16
+  },
+  submitBtn: {
+    marginTop: 30,
+    backgroundColor: C.brown,
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center'
+  },
+  submitBtnText: {
+    color: C.white,
+    fontWeight: 'bold'
+  },
 
   // Profile
   profileHero: {
@@ -575,20 +740,78 @@ const styles = StyleSheet.create({
   },
 
   // Bottom Nav
-  bottomNav: { flexDirection: 'row', backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 },
-  navItem: { flex: 1, alignItems: 'center' },
-  navIconWrap: { width: 44, height: 30, justifyContent: 'center', alignItems: 'center' },
-  navIconWrapActive: { backgroundColor: C.brown, borderRadius: 12, width: 50 },
-  navLabel: { fontSize: 10, color: C.mutedText, marginTop: 4 },
-  navLabelActive: { color: C.orange, fontWeight: 'bold' },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: C.white,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  navIconWrap: {
+    width: 44,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  navIconWrapActive: {
+    backgroundColor: C.brown,
+    borderRadius: 12,
+    width: 50
+  },
+  navLabel: {
+    fontSize: 10,
+    color: C.mutedText,
+    marginTop: 4
+  },
+  navLabelActive: {
+    color: C.orange,
+    fontWeight: 'bold'
+  },
 
   // Misc
-  arcContainer: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
-  arcOuter: { position: 'absolute', top: -100, right: -100, width: 300, height: 300, borderRadius: 150, borderWidth: 40, borderColor: C.orange + '10' },
-  arcInner: { position: 'absolute', top: -20, right: -40, width: 150, height: 150, borderRadius: 75, borderWidth: 20, borderColor: C.white + '08' },
-  halfCircle: { position: 'absolute', bottom: -100, left: -50, width: 250, height: 250, borderRadius: 125, borderWidth: 30, borderColor: C.orange + '05' },
-  emptyState: { alignItems: 'center', marginTop: 40 },
-  emptyStateText: { color: C.white + '66' },
+  arcContainer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden'
+  },
+  arcOuter: {
+    position: 'absolute',
+    top: -100,
+    right: -100,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    borderWidth: 40,
+    borderColor: C.orange + '10'
+  },
+  arcInner: {
+    position: 'absolute',
+    top: -20,
+    right: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 20,
+    borderColor: C.white + '08'
+  },
+  halfCircle: {
+    position: 'absolute',
+    bottom: -100, left: -50,
+    width: 250, height: 250,
+    borderRadius: 125,
+    borderWidth: 30,
+    borderColor: C.orange + '05'
+  },
+  emptyState: {
+    alignItems: 'center',
+    marginTop: 40
+  },
+  emptyStateText: {
+    color: C.white + '66'
+  },
 });
 
 export default HomeScreen;
