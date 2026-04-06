@@ -7,12 +7,12 @@ import { SignupScreen } from './src/screens/Auth/SignupScreen';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
 import { TestUploadScreen } from './src/screens/TestUploadScreen';
 import { TestCardsScreen } from './src/screens/TestCardsScreen';
-import { OwnerDashboard } from './src/screens/Home/OwnerDashboard';
-import { SellerDashboard } from './src/screens/Home/SellerDashboard';
-import { TrainerDashboard } from './src/screens/Home/TrainerDashboard';
+import { OwnerHomeScreen } from './src/screens/Home/OwnerHomeScreen';
+import { SellerHomeScreen } from './src/screens/Home/SellerHomeScreen';
+import { TrainerHomeScreen } from './src/screens/Home/TrainerHomeScreen';
 
 export default function App() {
-  const [screen, setScreen] = useState('trainer-dashboard');
+  const [screen, setScreen] = useState('owner-homescreen');
   const [user, setUser] = useState(null);
 
   const handleLoginSuccess = (userData) => {
@@ -22,13 +22,13 @@ export default function App() {
         setScreen('home');
         break;
       case 'owner':
-        setScreen('owner-dashboard');
+        setScreen('owner-homescreen');
         break;
       case 'seller':
-        setScreen('seller-dashboard');
+        setScreen('seller-homescreen');
         break;
       case 'trainer':
-        setScreen('trainer-dashboard');
+        setScreen('trainer-homescreen');
         break;
       default:
         setScreen('home');
@@ -63,11 +63,11 @@ export default function App() {
         <TestCardsScreen onBack={() => setScreen('login')} />
       )}
       <StatusBar style="auto" />
-      {screen === 'owner-dashboard' && <OwnerDashboard user={user} onLogout={handleLogout} />}
+      {screen === 'owner-homescreen' && <OwnerHomeScreen user={user} onLogout={handleLogout} />}
       <StatusBar style="auto" />
-      {screen === 'seller-dashboard' && <SellerDashboard user={user} onLogout={handleLogout} />}
+      {screen === 'seller-homescreen' && <SellerHomeScreen user={user} onLogout={handleLogout} />}
       <StatusBar style="auto" />
-      {screen === 'trainer-dashboard' && <TrainerDashboard user={user} onLogout={handleLogout} />}
+      {screen === 'trainer-homescreen' && <TrainerHomeScreen user={user} onLogout={handleLogout} />}
       <StatusBar style="auto" />
 
       {/* <View

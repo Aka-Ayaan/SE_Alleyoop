@@ -34,26 +34,26 @@ const C = {
 
 const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard-outline', activeIcon: 'view-dashboard' },
-    { id: 'bookings', label: 'Bookings', icon: 'calendar-text-outline', activeIcon: 'calendar-text' },
+    { id: 'orders', label: 'Orders', icon: 'cart-outline', activeIcon: 'cart' },
     { id: 'profile', label: 'Profile', icon: 'account-circle-outline', activeIcon: 'account-circle' },
 ];
 
 // ─── Placeholder data ────────────────────────────────────────────────────────
 
-const BOOKINGS_DATA = [
+const ORDERS_DATA = [
     {
         title: 'Today',
         data: [
-            { id: 'b1', customer: 'Ahmed Khan', time: '04:00 PM - 05:00 PM', venue: 'CourtKing Arena', status: 'Confirmed', price: 'Rs. 2,500' },
-            { id: 'b2', customer: 'Sara Williams', time: '07:30 PM - 09:00 PM', venue: 'ProArena Clifton', status: 'Confirmed', price: 'Rs. 4,000' },
+            { id: 'o1', customer: 'Ahmed Khan', item: 'Nike Air Max 270', category: 'Footwear', status: 'Processing', price: 'Rs. 12,500' },
+            { id: 'o2', customer: 'Sara Williams', item: 'Wilson Evolution Basketball', category: 'Equipment', status: 'Shipped', price: 'Rs. 8,000' },
         ],
     },
     {
-        title: 'Upcoming',
+        title: 'Recent',
         data: [
-            { id: 'b3', customer: 'Zain Malik', time: 'Oct 24, 05:00 PM', venue: 'HoopZone', status: 'Pending', price: 'Rs. 2,000' },
-            { id: 'b4', customer: 'Hamza Ali', time: 'Oct 25, 08:00 PM', venue: 'CourtKing Arena', status: 'Confirmed', price: 'Rs. 2,500' },
-            { id: 'b5', customer: 'Omar J.', time: 'Oct 26, 06:00 PM', venue: 'SkillLab PK', status: 'Confirmed', price: 'Rs. 3,200' },
+            { id: 'o3', customer: 'Zain Malik', item: 'Dri-FIT Training Shirt', category: 'Apparel', status: 'Delivered', price: 'Rs. 3,200' },
+            { id: 'o4', customer: 'Hamza Ali', item: 'Jordan Jumpman Shorts', category: 'Apparel', status: 'Processing', price: 'Rs. 4,500' },
+            { id: 'o5', customer: 'Omar J.', item: 'Spalding Precision', category: 'Equipment', status: 'Delivered', price: 'Rs. 6,800' },
         ],
     },
 ];
@@ -62,10 +62,10 @@ const BOOKINGS_DATA = [
 
 function DashboardScreen() {
     const menuItems = [
-        { id: '1', title: 'Add Venue', icon: 'plus-circle' },
-        { id: '2', title: 'Update Venue', icon: 'pencil-circle' },
-        { id: '3', title: 'View Venue', icon: 'eye-circle' },
-        { id: '4', title: 'Remove Venue', icon: 'delete-circle' },
+        { id: '1', title: 'Add Product', icon: 'plus-circle' },
+        { id: '2', title: 'Update Product', icon: 'pencil-circle' },
+        { id: '3', title: 'View Product', icon: 'eye-circle' },
+        { id: '4', title: 'Remove Product', icon: 'delete-circle' },
     ];
 
     return (
@@ -78,7 +78,7 @@ function DashboardScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.headerText}>Venue Management</Text>
+                <Text style={styles.headerText}>Product Management</Text>
 
                 {menuItems.map((item) => (
                     <TouchableOpacity
@@ -101,34 +101,34 @@ function DashboardScreen() {
     );
 }
 
-function BookingsScreen() {
+function OrdersScreen() {
     // 1. States for filtering
     const [statusFilter, setStatusFilter] = useState('All');
-    const [venueFilter, setVenueFilter] = useState('All');
-    const [timeFilter, setTimeFilter] = useState('All'); // All, Today, Upcoming
+    const [categoryFilter, setCategoryFilter] = useState('All');
+    const [timeFilter, setTimeFilter] = useState('All'); // All, Today, Recent
 
-    // 2. Extract unique venues for the filter list
-    const uniqueVenues = ['All', ...new Set(BOOKINGS_DATA.flatMap(s => s.data.map(b => b.venue)))];
-    const statuses = ['All', 'Confirmed', 'Pending'];
-    const timeOptions = ['All', 'Today', 'Upcoming'];
+    // 2. Extract unique categories for the filter list
+    const uniqueCategories = ['All', ...new Set(ORDERS_DATA.flatMap(s => s.data.map(o => o.category)))];
+    const statuses = ['All', 'Processing', 'Shipped', 'Delivered'];
+    const timeOptions = ['All', 'Today', 'Recent'];
 
     // 3. Filter Logic
     const filteredSections = useMemo(() => {
-        return BOOKINGS_DATA.map(section => {
+        return ORDERS_DATA.map(section => {
             // Check if this section matches the Time Filter
             if (timeFilter !== 'All' && section.title !== timeFilter) {
                 return { ...section, data: [] };
             }
 
-            const filteredData = section.data.filter(booking => {
-                const statusMatch = statusFilter === 'All' || booking.status === statusFilter;
-                const venueMatch = venueFilter === 'All' || booking.venue === venueFilter;
-                return statusMatch && venueMatch;
+            const filteredData = section.data.filter(order => {
+                const statusMatch = statusFilter === 'All' || order.status === statusFilter;
+                const categoryMatch = categoryFilter === 'All' || order.category === categoryFilter;
+                return statusMatch && categoryMatch;
             });
 
             return { ...section, data: filteredData };
-        }).filter(section => section.data.length > 0); // Hide empty sections
-    }, [statusFilter, venueFilter, timeFilter]);
+        }).filter(section => section.data.length > 0);
+    }, [statusFilter, categoryFilter, timeFilter]);
 
     // UI Component for Filter Chips
     const FilterGroup = ({ label, options, current, setter, icon }) => (
@@ -153,51 +153,60 @@ function BookingsScreen() {
         </View>
     );
 
-    const renderBookingCard = ({ item }) => (
-        <TouchableOpacity style={styles.bookingCard} activeOpacity={0.8}>
-            <View style={styles.bookingInfo}>
-                <View style={styles.bookingHeader}>
-                    <Text style={styles.bookingCustomer}>{item.customer}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: item.status === 'Confirmed' ? '#E8F5E9' : '#FFF3E0' }]}>
-                        <Text style={[styles.statusText, { color: item.status === 'Confirmed' ? '#2E7D32' : '#EF6C00' }]}>
-                            {item.status}
-                        </Text>
+    const renderOrderCard = ({ item }) => {
+        // Dynamic status colors
+        const getStatusStyles = (status) => {
+            switch (status) {
+                case 'Delivered': return { bg: '#E8F5E9', text: '#2E7D32' };
+                case 'Shipped': return { bg: '#E3F2FD', text: '#1565C0' };
+                case 'Processing': return { bg: '#FFF3E0', text: '#EF6C00' };
+                default: return { bg: '#F5F5F5', text: '#616161' };
+            }
+        };
+
+        const statusStyle = getStatusStyles(item.status);
+
+        return (
+            <TouchableOpacity style={styles.orderCard} activeOpacity={0.8}>
+                <View style={styles.orderInfo}>
+                    <View style={styles.orderHeader}>
+                        <Text style={styles.customerName}>{item.customer}</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                            <Text style={[styles.statusText, { color: statusStyle.text }]}>
+                                {item.status}
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={styles.orderDetailRow}>
+                        <MaterialCommunityIcons name="package-variant-closed" size={14} color={C.brown + '99'} />
+                        <Text style={styles.orderDetailText}>{item.item}</Text>
+                    </View>
+                    <View style={styles.orderDetailRow}>
+                        <MaterialCommunityIcons name="tag-outline" size={14} color={C.orange} />
+                        <Text style={styles.categoryText}>{item.category}</Text>
                     </View>
                 </View>
-                <View style={styles.bookingDetailRow}>
-                    <MaterialCommunityIcons name="map-marker-outline" size={14} color={C.brown + '99'} />
-                    <Text style={styles.bookingDetailText}>{item.venue}</Text>
+                <View style={styles.orderPriceAction}>
+                    <Text style={styles.orderPrice}>{item.price}</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={C.brown + '44'} />
                 </View>
-                <View style={styles.bookingDetailRow}>
-                    <MaterialCommunityIcons name="clock-outline" size={14} color={C.orange} />
-                    <Text style={styles.bookingTimeText}>{item.time}</Text>
-                </View>
-            </View>
-            <View style={styles.bookingPriceAction}>
-                <Text style={styles.bookingPrice}>{item.price}</Text>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={C.brown + '44'} />
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     return (
-        <View style={styles.rootbrown}>
-            <View style={styles.arcContainer} pointerEvents="none">
-                <View style={styles.arcOuter} />
-                <View style={styles.arcInner} />
-            </View>
-
+        <View style={styles.rootContainer}>
             {/* --- Filter Bar Area --- */}
             <View style={styles.filterContainer}>
                 <FilterGroup label="Status" options={statuses} current={statusFilter} setter={setStatusFilter} icon="filter-variant" />
-                <FilterGroup label="Venues" options={uniqueVenues} current={venueFilter} setter={setVenueFilter} icon="stadium" />
-                <FilterGroup label="Time" options={timeOptions} current={timeFilter} setter={setTimeFilter} icon="calendar-clock" />
+                <FilterGroup label="Categories" options={uniqueCategories} current={categoryFilter} setter={setCategoryFilter} icon="shape-outline" />
+                <FilterGroup label="Timeframe" options={timeOptions} current={timeFilter} setter={setTimeFilter} icon="calendar-clock" />
             </View>
 
             <SectionList
                 sections={filteredSections}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.bookingListContent}
+                contentContainerStyle={styles.orderListContent}
                 renderSectionHeader={({ section: { title } }) => (
                     <View style={styles.sectionHeaderContainer}>
                         <View style={styles.sectionLine} />
@@ -205,11 +214,11 @@ function BookingsScreen() {
                         <View style={styles.sectionLine} />
                     </View>
                 )}
-                renderItem={renderBookingCard}
+                renderItem={renderOrderCard}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <MaterialCommunityIcons name="calendar-search" size={60} color={C.white + '33'} />
-                        <Text style={styles.emptyStateText}>No bookings match these filters</Text>
+                        <MaterialCommunityIcons name="package-variant-remove" size={60} color={C.white + '33'} />
+                        <Text style={styles.emptyStateText}>No orders match these filters</Text>
                     </View>
                 }
             />
@@ -247,8 +256,8 @@ function ProfileScreen({ onLogout, user }) {
                     <Text style={styles.profileName}>{user?.name || 'Alleyoop User'}</Text>
                     <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
                     <View style={styles.profileBadge}>
-                        <MaterialCommunityIcons name="stadium" size={12} color={C.orange} />
-                        <Text style={styles.profileBadgeText}>{user?.userType || 'Owner'}</Text>
+                        <MaterialCommunityIcons name="shopping" size={12} color={C.orange} />
+                        <Text style={styles.profileBadgeText}>{user?.userType || 'Seller'}</Text>
                     </View>
                 </View>
 
@@ -290,7 +299,7 @@ function ProfileScreen({ onLogout, user }) {
 
 // ─── Main HomeScreen ──────────────────────────────────────────────────────────
 
-export function OwnerDashboard({ user, onLogout }) {
+export function SellerHomeScreen({ user, onLogout }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
     const [activeTab, setActiveTab] = useState(0);
     const translateX = useRef(new Animated.Value(0)).current;
@@ -335,7 +344,7 @@ export function OwnerDashboard({ user, onLogout }) {
 
     const tabContent = [
         <DashboardScreen key="dashboard" />,
-        <BookingsScreen key="bookings" />,
+        <OrdersScreen key="orders" />,
         <ProfileScreen key="profile" onLogout={onLogout} user={user} />,
     ];
 
@@ -755,8 +764,13 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
 
-    // ── Bookings Section Styles ────────────────────────────────────────────────
-    bookingListContent: {
+    // ── Orders Screen ─────────────────────────────────────────────────────────────
+
+    rootContainer: {
+        flex: 1,
+        backgroundColor: C.brown,
+    },
+    orderListContent: {
         paddingHorizontal: 20,
         paddingBottom: 120,
     },
@@ -768,7 +782,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         color: C.white,
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '800',
         marginHorizontal: 15,
         textTransform: 'uppercase',
@@ -779,31 +793,30 @@ const styles = StyleSheet.create({
         height: 1,
         backgroundColor: C.white + '33',
     },
-    bookingCard: {
+    orderCard: {
         backgroundColor: C.white,
         borderRadius: 18,
         padding: 16,
         marginBottom: 12,
         flexDirection: 'row',
         alignItems: 'center',
-        // Elevation
+        elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
-        elevation: 3,
     },
-    bookingInfo: {
+    orderInfo: {
         flex: 1,
     },
-    bookingHeader: {
+    orderHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 8,
     },
-    bookingCustomer: {
-        fontSize: 18,
+    customerName: {
+        fontSize: 16,
         fontWeight: 'bold',
         color: C.brown,
     },
@@ -817,33 +830,32 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         textTransform: 'uppercase',
     },
-    bookingDetailRow: {
+    orderDetailRow: {
         flexDirection: 'row',
         alignItems: 'center',
         marginTop: 4,
         gap: 6,
     },
-    bookingDetailText: {
+    orderDetailText: {
         fontSize: 14,
         color: C.brown + '99',
+        fontWeight: '500',
     },
-    bookingTimeText: {
-        fontSize: 14,
+    categoryText: {
+        fontSize: 13,
         fontWeight: '600',
         color: C.brown,
     },
-    bookingPriceAction: {
+    orderPriceAction: {
         alignItems: 'flex-end',
         gap: 8,
         marginLeft: 10,
     },
-    bookingPrice: {
+    orderPrice: {
         fontSize: 16,
         fontWeight: 'bold',
         color: C.orange,
     },
-
-    // ── Filter Styles ────────────────────────────────────────────────────────
     filterContainer: {
         backgroundColor: C.brown,
         paddingBottom: 15,
@@ -892,8 +904,6 @@ const styles = StyleSheet.create({
     filterChipTextActive: {
         color: C.white,
     },
-
-    // ── Empty State ──────────────────────────────────────────────────────────
     emptyState: {
         alignItems: 'center',
         marginTop: 60,
@@ -905,4 +915,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default OwnerDashboard;
+export default SellerHomeScreen;

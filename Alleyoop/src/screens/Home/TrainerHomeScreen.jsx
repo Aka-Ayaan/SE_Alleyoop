@@ -286,7 +286,7 @@ function ProfileScreen({ onLogout, user }) {
 
 // ─── Main HomeScreen ──────────────────────────────────────────────────────────
 
-export function TrainerDashboard({ user, onLogout }) {
+export function TrainerHomeScreen({ user, onLogout }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
     const [activeTab, setActiveTab] = useState(0);
     const translateX = useRef(new Animated.Value(0)).current;
@@ -905,4 +905,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default TrainerDashboard;
+export default TrainerHomeScreen;
