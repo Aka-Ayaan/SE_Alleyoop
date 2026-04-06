@@ -60,7 +60,44 @@ const SESSIONS_DATA = [
 
 // ─── Tab screens ─────────────────────────────────────────────────────────────
 
-function DashboardScreen() {
+function SubScreenContent({ type, id, data, onBack }) {
+    // Labels for the sub-screens
+    const getTitle = () => {
+        if (type === 'training') {
+            return { '1': 'Add Training', '2': 'Update Training', '3': 'View Training', '4': 'Remove Training' }[id];
+        }
+        if (type === 'session') return 'Session Details';
+        if (type === 'profile') return id; // e.g., "Edit Profile"
+        return 'Details';
+    };
+
+    return (
+        <View style={styles.formContainer}>
+            <View style={styles.formHeader}>
+                <Text style={styles.formTitle}>{getTitle()}</Text>
+            </View>
+            <ScrollView contentContainerStyle={styles.formScroll}>
+                <View style={styles.placeholderForm}>
+                    <MaterialCommunityIcons
+                        name={type === 'session' ? "clipboard-text" : type === 'profile' ? "account-cog" : "form-select"}
+                        size={80}
+                        color={C.orange + '22'}
+                    />
+                    <Text style={styles.placeholderText}>
+                        {type === 'session' ? `Viewing Session Details` : `Interface for ${getTitle()}`}
+                    </Text>
+
+                    {/* Example Action Button */}
+                    <TouchableOpacity style={styles.submitBtn} onPress={onBack}>
+                        <Text style={styles.submitBtnText}>Done</Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+        </View>
+    );
+}
+
+function DashboardScreen({ onActionSelect }) {
     const menuItems = [
         { id: '1', title: 'Add Training', icon: 'plus-circle' },
         { id: '2', title: 'Update Training', icon: 'pencil-circle' },
@@ -77,7 +114,7 @@ function DashboardScreen() {
                 <View style={styles.halfCircle} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.headerText}>Training Management</Text>
 
                 {menuItems.map((item) => (
@@ -85,7 +122,7 @@ function DashboardScreen() {
                         key={item.id}
                         style={styles.card}
                         activeOpacity={0.7}
-                        onPress={() => console.log(`${item.title} pressed`)}
+                        onPress={() => onActionSelect(item.id)}
                     >
                         <View style={[styles.iconWrapper, { backgroundColor: C.brown + '15' }]}>
                             <MaterialCommunityIcons name={item.icon} size={32} color={C.brown} />
@@ -101,7 +138,7 @@ function DashboardScreen() {
     );
 }
 
-function TrainingsScreen() {
+function TrainingsScreen({ onSessionSelect }) {
     // 1. States for filtering
     const [statusFilter, setStatusFilter] = useState('All');
     const [typeFilter, setTypeFilter] = useState('All');
@@ -152,7 +189,11 @@ function TrainingsScreen() {
     );
 
     const renderSessionCard = ({ item }) => (
-        <TouchableOpacity style={styles.sessionCard} activeOpacity={0.8}>
+        <TouchableOpacity
+            style={styles.sessionCard}
+            activeOpacity={0.8}
+            onPress={() => onSessionSelect(item)} // Trigger selection
+        >
             <View style={styles.sessionInfo}>
                 <View style={styles.sessionHeader}>
                     <Text style={styles.traineeName}>{item.trainee}</Text>
@@ -191,6 +232,7 @@ function TrainingsScreen() {
             </View>
 
             <SectionList
+                showsVerticalScrollIndicator={false}
                 sections={filteredSections}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.sessionListContent}
@@ -213,7 +255,7 @@ function TrainingsScreen() {
     );
 }
 
-function ProfileScreen({ onLogout, user }) {
+function ProfileScreen({ onLogout, user, onMenuSelect }) {
     const stats = [
         { label: 'Following', value: '138' },
         { label: 'Followers', value: '91' },
@@ -264,7 +306,12 @@ function ProfileScreen({ onLogout, user }) {
                 {/* Menu items */}
                 <View style={styles.menuSection}>
                     {menuItems.map((item, i) => (
-                        <TouchableOpacity key={item.label} style={styles.menuItem} activeOpacity={0.7}>
+                        <TouchableOpacity
+                            key={item.label}
+                            style={styles.menuItem}
+                            activeOpacity={0.7}
+                            onPress={() => onMenuSelect(item.label)} // Trigger selection
+                        >
                             <View style={styles.menuIconWrap}>
                                 <MaterialCommunityIcons name={item.icon} size={20} color={C.orange} />
                             </View>
@@ -289,11 +336,13 @@ function ProfileScreen({ onLogout, user }) {
 export function TrainerHomeScreen({ user, onLogout }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
     const [activeTab, setActiveTab] = useState(0);
+    const [activeSubScreen, setActiveSubScreen] = useState(null);
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
 
     const goToTab = useCallback((index) => {
         setActiveTab(index);
+        setActiveSubScreen(null);
         Animated.spring(translateX, {
             toValue: -index * width,
             useNativeDriver: true,
@@ -330,9 +379,20 @@ export function TrainerHomeScreen({ user, onLogout }) {
     const currentTab = TABS[activeTab];
 
     const tabContent = [
-        <DashboardScreen key="dashboard" />,
-        <TrainingsScreen key="trainings" />,
-        <ProfileScreen key="profile" onLogout={onLogout} user={user} />,
+        <DashboardScreen
+            key="dashboard"
+            onActionSelect={(id) => setActiveSubScreen({ type: 'training', id })}
+        />,
+        <TrainingsScreen
+            key="trainings"
+            onSessionSelect={(session) => setActiveSubScreen({ type: 'session', id: session.id, data: session })}
+        />,
+        <ProfileScreen
+            key="profile"
+            user={user}
+            onLogout={onLogout}
+            onMenuSelect={(label) => setActiveSubScreen({ type: 'profile', id: label })}
+        />,
     ];
 
     return (
@@ -343,9 +403,19 @@ export function TrainerHomeScreen({ user, onLogout }) {
             {/* ── Top bar ── */}
             <View style={[styles.topBar, { paddingTop: insets.top }]}>
 
-                {/* Left Side: Section Title */}
+                {/* LEFT SIDE: Conditional Tab Label or Back Button */}
                 <View style={styles.topBarSide}>
-                    <Text style={styles.topBarTitle}>{currentTab.label}</Text>
+                    {activeSubScreen ? (
+                        <TouchableOpacity
+                            style={styles.headerBackButton}
+                            onPress={() => setActiveSubScreen(null)}
+                        >
+                            <MaterialCommunityIcons name="chevron-left" size={28} color={C.brown} />
+                            <Text style={styles.headerBackText}>Back</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <Text style={styles.topBarTitle}>{currentTab.label}</Text>
+                    )}
                 </View>
 
                 {/* Center Side: Logo */}
@@ -359,65 +429,57 @@ export function TrainerHomeScreen({ user, onLogout }) {
 
                 {/* Right Side: Action Button */}
                 <View style={styles.topBarSide}>
-                    <TouchableOpacity
-                        style={styles.topBarAction}
-                        onPress={activeTab === 3 ? onLogout : () => { }}
-                    >
-                        <MaterialCommunityIcons
-                            name={activeTab < 3 ? "magnify" : "logout"}
-                            size={26}
-                            color={activeTab < 3 ? C.brown : C.orange}
-                        />
-                    </TouchableOpacity>
+                    {/* Hide search if a subscreen is open */}
+                    {!activeSubScreen && (
+                        <TouchableOpacity style={styles.topBarAction}>
+                            <MaterialCommunityIcons
+                                name={activeTab === 2 ? "logout" : "magnify"}
+                                size={26}
+                                color={C.brown}
+                            />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
 
 
-            {/* ── Swipeable content ── */}
-            <View style={styles.contentArea} {...panResponder.panHandlers}>
-                <Animated.View
-                    style={[
-                        styles.tabsStrip,
-                        { transform: [{ translateX }] },
-                    ]}
-                >
-                    {tabContent.map((screen, i) => (
-                        <View key={i} style={styles.tabPane}>
-                            {screen}
-                        </View>
-                    ))}
-                </Animated.View>
-            </View>
+            {/* Conditional Main Body */}
+            {activeSubScreen ? (
+                <SubScreenContent
+                    {...activeSubScreen}
+                    onBack={() => setActiveSubScreen(null)}
+                />
+            ) : (
+                <>
+                    <View style={styles.contentArea} {...panResponder.panHandlers}>
+                        <Animated.View style={[styles.tabsStrip, { transform: [{ translateX }] }]}>
+                            {tabContent.map((screen, i) => (
+                                <View key={i} style={styles.tabPane}>{screen}</View>
+                            ))}
+                        </Animated.View>
+                    </View>
 
-            {/* ── Bottom nav ── */}
-            <View style={styles.bottomNav}>
-                {TABS.map((tab, i) => {
-                    const isActive = activeTab === i;
-                    return (
-                        <TouchableOpacity
-                            key={tab.id}
-                            style={styles.navItem}
-                            onPress={() => goToTab(i)}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.navIconWrap, isActive && styles.navIconWrapActive]}>
-                                <MaterialCommunityIcons
-                                    name={isActive ? tab.activeIcon : tab.icon}
-                                    size={24}
-                                    color={isActive ? C.white : C.brown + '66'}
-                                />
-                            </View>
-                            <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
-                                {tab.label}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-            {/* Optional: Add bottom inset padding for iPhones with no home button */}
-            <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-                {/* ... nav items ... */}
-            </View>
+                    {/* Bottom Nav */}
+                    <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+                        {TABS.map((tab, i) => {
+                            const isActive = activeTab === i;
+                            return (
+                                <TouchableOpacity key={tab.id} style={styles.navItem} onPress={() => goToTab(i)}>
+                                    <View style={[styles.navIconWrap, isActive && styles.navIconWrapActive]}>
+                                        <MaterialCommunityIcons
+                                            name={isActive ? tab.activeIcon : tab.icon}
+                                            size={24}
+                                            color={isActive ? C.white : C.brown + '66'}
+                                        />
+                                    </View>
+                                    <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{tab.label}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </>
+            )}
+
         </View>
     );
 }
@@ -487,7 +549,7 @@ const styles = StyleSheet.create({
         height: 70,
     },
     topBarSide: {
-        width: 70, // Gives enough room for "Venues" and the Icon
+        width: 75, // Gives enough room for "Venues" and the Icon
     },
     topBarCenter: {
         flex: 1,
@@ -507,6 +569,16 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
         justifyContent: 'center',
         height: '100%', // Makes it easier to tap
+    }, headerBackButton: {
+        flexDirection: 'row', // Horizontal layout
+        alignItems: 'center', // Vertical centering
+        marginLeft: -10,      // Nudge left so the icon arrow sits near the edge
+    },
+    headerBackText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: C.brown,
+        marginLeft: -6,       // Pull text closer to the icon for a tighter look
     },
 
     // ── Content ────────────────────────────────────────────────────────────────
@@ -902,6 +974,62 @@ const styles = StyleSheet.create({
         color: C.white + '88',
         fontSize: 16,
         marginTop: 15,
+    },
+
+    // ── Subscreen ──────────────────────────────────────────────────────────
+
+    formContainer: {
+        flex: 1,
+        backgroundColor: C.white,
+    },
+    formHeader: {
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: C.border,
+        backgroundColor: C.bg + '33',
+    },
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+        gap: 5,
+    },
+    backText: {
+        color: C.brown,
+        fontWeight: '600',
+    },
+    formTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: C.orange,
+    },
+    formScroll: {
+        padding: 20,
+    },
+    placeholderForm: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+    },
+    placeholderText: {
+        marginTop: 20,
+        fontSize: 16,
+        color: C.mutedText,
+        textAlign: 'center',
+    },
+    submitBtn: {
+        marginTop: 40,
+        backgroundColor: C.brown,
+        paddingHorizontal: 40,
+        paddingVertical: 15,
+        borderRadius: 12,
+        width: '100%',
+        alignItems: 'center',
+    },
+    submitBtnText: {
+        color: C.white,
+        fontWeight: 'bold',
+        fontSize: 16,
     },
 });
 
