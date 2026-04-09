@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "start": "node scripts/update_ip.js && expo start",
+    "android": "node scripts/update_ip.js && expo start --android",
+    "ios": "node scripts/update_ip.js && expo start --ios",
+    "web": "node scripts/update_ip.js && expo start --web"
   },
   "dependencies": {
     "@react-native-community/datetimepicker": "8.4.4",
