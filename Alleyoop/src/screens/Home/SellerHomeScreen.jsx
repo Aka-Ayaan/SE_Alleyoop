@@ -1,11 +1,11 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     ScrollView,
-    FlatList,
+    ActivityIndicator,
     Image,
     Dimensions,
     Animated,
@@ -13,10 +13,10 @@ import {
     StatusBar,
     Platform,
     SectionList,
-    Touchable,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { endpoints } from '../../config/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -38,25 +38,57 @@ const TABS = [
     { id: 'profile', label: 'Profile', icon: 'account-circle-outline', activeIcon: 'account-circle' },
 ];
 
-// ─── Placeholder data ────────────────────────────────────────────────────────
-
-const ORDERS_DATA = [
-    {
-        title: 'Today',
-        data: [
-            { id: 'o1', customer: 'Ahmed Khan', item: 'Nike Air Max 270', category: 'Footwear', status: 'Processing', price: 'Rs. 12,500' },
-            { id: 'o2', customer: 'Sara Williams', item: 'Wilson Evolution Basketball', category: 'Equipment', status: 'Shipped', price: 'Rs. 8,000' },
-        ],
-    },
-    {
-        title: 'Recent',
-        data: [
-            { id: 'o3', customer: 'Zain Malik', item: 'Dri-FIT Training Shirt', category: 'Apparel', status: 'Delivered', price: 'Rs. 3,200' },
-            { id: 'o4', customer: 'Hamza Ali', item: 'Jordan Jumpman Shorts', category: 'Apparel', status: 'Processing', price: 'Rs. 4,500' },
-            { id: 'o5', customer: 'Omar J.', item: 'Spalding Precision', category: 'Equipment', status: 'Delivered', price: 'Rs. 6,800' },
-        ],
-    },
+const EMPTY_ORDER_SECTIONS = [
+    { title: 'Today', data: [] },
+    { title: 'Recent', data: [] },
 ];
+
+const formatCurrency = (amount) => `Rs. ${Number(amount || 0).toLocaleString()}`;
+
+const getTimeBucket = (dateValue) => {
+    if (!dateValue) return 'Recent';
+    const createdAt = new Date(dateValue);
+    const now = new Date();
+
+    if (
+        createdAt.getFullYear() === now.getFullYear()
+        && createdAt.getMonth() === now.getMonth()
+        && createdAt.getDate() === now.getDate()
+    ) {
+        return 'Today';
+    }
+
+    return 'Recent';
+};
+
+const mapOrdersToSections = (orders = []) => {
+    const grouped = {
+        Today: [],
+        Recent: [],
+    };
+
+    orders.forEach((order) => {
+        const bucket = getTimeBucket(order.created_at);
+        const firstItemName = order.itemNames
+            ? order.itemNames.split(',')[0].trim()
+            : `${order.itemsCount || 0} item(s)`;
+
+        grouped[bucket].push({
+            id: String(order.orderId),
+            customer: order.customerName || 'Customer',
+            item: firstItemName || 'Order item',
+            category: order.category || 'Uncategorized',
+            status: order.status || 'Pending',
+            price: formatCurrency(order.totalAmount),
+            createdAt: order.created_at,
+        });
+    });
+
+    return [
+        { title: 'Today', data: grouped.Today },
+        { title: 'Recent', data: grouped.Recent },
+    ];
+};
 
 // ─── Tab screens ─────────────────────────────────────────────────────────────
 
@@ -104,7 +136,7 @@ function SubScreenContent({ type, id, data, onBack }) {
     );
 }
 
-function DashboardScreen({ onActionSelect }) {
+function DashboardScreen({ onActionSelect, productCount }) {
     const menuItems = [
         { id: '1', title: 'Add Product', icon: 'plus-circle' },
         { id: '2', title: 'Update Product', icon: 'pencil-circle' },
@@ -123,6 +155,7 @@ function DashboardScreen({ onActionSelect }) {
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.headerText}>Product Management</Text>
+                <Text style={styles.dashboardSubText}>Total listed products: {productCount}</Text>
 
                 {menuItems.map((item) => (
                     <TouchableOpacity
@@ -145,20 +178,20 @@ function DashboardScreen({ onActionSelect }) {
     );
 }
 
-function OrdersScreen({ onOrderSelect }) {
+function OrdersScreen({ onOrderSelect, ordersSections, isLoading, errorMessage, onRetry }) {
     // 1. States for filtering
     const [statusFilter, setStatusFilter] = useState('All');
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [timeFilter, setTimeFilter] = useState('All'); // All, Today, Recent
 
     // 2. Extract unique categories for the filter list
-    const uniqueCategories = ['All', ...new Set(ORDERS_DATA.flatMap(s => s.data.map(o => o.category)))];
-    const statuses = ['All', 'Processing', 'Shipped', 'Delivered'];
+    const uniqueCategories = ['All', ...new Set(ordersSections.flatMap(s => s.data.map(o => o.category)))];
+    const statuses = ['All', ...new Set(ordersSections.flatMap(s => s.data.map(o => o.status)))];
     const timeOptions = ['All', 'Today', 'Recent'];
 
     // 3. Filter Logic
     const filteredSections = useMemo(() => {
-        return ORDERS_DATA.map(section => {
+        return ordersSections.map(section => {
             // Check if this section matches the Time Filter
             if (timeFilter !== 'All' && section.title !== timeFilter) {
                 return { ...section, data: [] };
@@ -172,7 +205,7 @@ function OrdersScreen({ onOrderSelect }) {
 
             return { ...section, data: filteredData };
         }).filter(section => section.data.length > 0);
-    }, [statusFilter, categoryFilter, timeFilter]);
+    }, [statusFilter, categoryFilter, timeFilter, ordersSections]);
 
     // UI Component for Filter Chips
     const FilterGroup = ({ label, options, current, setter, icon }) => (
@@ -241,6 +274,26 @@ function OrdersScreen({ onOrderSelect }) {
             </TouchableOpacity>
         );
     };
+
+    if (isLoading) {
+        return (
+            <View style={styles.ordersStateWrap}>
+                <ActivityIndicator size="large" color={C.orange} />
+                <Text style={styles.ordersStateText}>Loading seller orders...</Text>
+            </View>
+        );
+    }
+
+    if (errorMessage) {
+        return (
+            <View style={styles.ordersStateWrap}>
+                <Text style={styles.ordersStateText}>{errorMessage}</Text>
+                <TouchableOpacity style={styles.retryStateButton} onPress={onRetry}>
+                    <Text style={styles.retryStateText}>Retry</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.rootContainer}>
@@ -357,8 +410,69 @@ export function SellerHomeScreen({ user, onLogout }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
     const [activeTab, setActiveTab] = useState(0);
     const [activeSubScreen, setActiveSubScreen] = useState(null);
+    const [sellerProducts, setSellerProducts] = useState([]);
+    const [orderSections, setOrderSections] = useState(EMPTY_ORDER_SECTIONS);
+    const [ordersLoading, setOrdersLoading] = useState(false);
+    const [ordersError, setOrdersError] = useState('');
+    const [productsError, setProductsError] = useState('');
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
+
+    const fetchSellerData = useCallback(async () => {
+        if (!user?.userId) return;
+
+        setOrdersLoading(true);
+        setOrdersError('');
+        setProductsError('');
+
+        const productsUrl = `${endpoints.sellerProducts}?sellerId=${encodeURIComponent(String(user.userId))}`;
+        const ordersUrl = `${endpoints.sellerOrders}/${encodeURIComponent(String(user.userId))}`;
+
+        const [productsResult, ordersResult] = await Promise.allSettled([
+            fetch(productsUrl),
+            fetch(ordersUrl),
+        ]);
+
+        if (productsResult.status === 'fulfilled') {
+            try {
+                const productsData = await productsResult.value.json();
+                if (!productsResult.value.ok || !Array.isArray(productsData)) {
+                    setProductsError(productsData?.error || 'Failed to fetch seller products');
+                    setSellerProducts([]);
+                } else {
+                    setSellerProducts(productsData);
+                }
+            } catch (err) {
+                setProductsError('Failed to parse seller products response');
+                setSellerProducts([]);
+            }
+        } else {
+            setProductsError('Failed to fetch seller products');
+            setSellerProducts([]);
+        }
+
+        if (ordersResult.status === 'fulfilled') {
+            try {
+                const ordersData = await ordersResult.value.json();
+                if (!ordersResult.value.ok || !Array.isArray(ordersData)) {
+                    throw new Error(ordersData?.error || 'Failed to fetch seller orders');
+                }
+                setOrderSections(mapOrdersToSections(ordersData));
+            } catch (err) {
+                setOrdersError(err?.message || 'Failed to fetch seller orders');
+                setOrderSections(EMPTY_ORDER_SECTIONS);
+            }
+        } else {
+            setOrdersError('Failed to fetch seller orders');
+            setOrderSections(EMPTY_ORDER_SECTIONS);
+        }
+
+        setOrdersLoading(false);
+    }, [user?.userId]);
+
+    useEffect(() => {
+        fetchSellerData();
+    }, [fetchSellerData]);
 
     const goToTab = useCallback((index) => {
         setActiveTab(index);
@@ -401,10 +515,15 @@ export function SellerHomeScreen({ user, onLogout }) {
     const tabContent = [
         <DashboardScreen
             key="dashboard"
+            productCount={sellerProducts.length}
             onActionSelect={(id) => setActiveSubScreen({ type: 'product', id })}
         />,
         <OrdersScreen
             key="orders"
+            ordersSections={orderSections}
+            isLoading={ordersLoading}
+            errorMessage={ordersError}
+            onRetry={fetchSellerData}
             onOrderSelect={(order) => setActiveSubScreen({ type: 'order', id: order.id, data: order })}
         />,
         <ProfileScreen
@@ -471,6 +590,12 @@ export function SellerHomeScreen({ user, onLogout }) {
                 />
             ) : (
                 <>
+                    {productsError ? (
+                        <View style={styles.fetchWarnBar}>
+                            <Text style={styles.fetchWarnText}>{productsError}</Text>
+                        </View>
+                    ) : null}
+
                     <View style={styles.contentArea} {...panResponder.panHandlers}>
                         <Animated.View style={[styles.tabsStrip, { transform: [{ translateX }] }]}>
                             {tabContent.map((screen, i) => (
@@ -629,6 +754,14 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 30,
         textAlign: 'center',
+    },
+    dashboardSubText: {
+        color: C.white + 'CC',
+        marginTop: -20,
+        marginBottom: 20,
+        textAlign: 'center',
+        fontSize: 13,
+        fontWeight: '600',
     },
     card: {
         backgroundColor: '#FFFFFF',
@@ -992,6 +1125,42 @@ const styles = StyleSheet.create({
         color: C.white + '88',
         fontSize: 16,
         marginTop: 15,
+    },
+    ordersStateWrap: {
+        flex: 1,
+        backgroundColor: C.brown,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
+    },
+    ordersStateText: {
+        color: C.white,
+        fontSize: 15,
+        textAlign: 'center',
+        marginTop: 14,
+    },
+    retryStateButton: {
+        marginTop: 18,
+        backgroundColor: C.orange,
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    retryStateText: {
+        color: C.white,
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    fetchWarnBar: {
+        backgroundColor: '#FFF3E0',
+        borderBottomWidth: 1,
+        borderBottomColor: '#FFE0B2',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    fetchWarnText: {
+        color: '#8A4B00',
+        fontSize: 12,
     },
 
     // ── Subscreen ──────────────────────────────────────────────────────────

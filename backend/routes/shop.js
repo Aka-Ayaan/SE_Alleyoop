@@ -145,4 +145,37 @@ router.get('/orders/:playerId', (req, res) => {
   });
 });
 
+// Seller: get orders received for own shop
+router.get('/orders/seller/:sellerId', (req, res) => {
+  const { sellerId } = req.params;
+
+  const query = `
+    SELECT
+      o.id AS orderId,
+      p.name AS customerName,
+      os.status_name AS status,
+      o.total_amount AS totalAmount,
+      o.created_at,
+      COUNT(oi.id) AS itemsCount,
+      GROUP_CONCAT(pr.name ORDER BY oi.id SEPARATOR ', ') AS itemNames,
+      COALESCE(MAX(pr.category), 'Uncategorized') AS category
+    FROM orders o
+    JOIN players p ON o.player_id = p.id
+    JOIN order_status os ON o.status_id = os.id
+    LEFT JOIN order_items oi ON oi.order_id = o.id
+    LEFT JOIN products pr ON oi.product_id = pr.id
+    WHERE o.seller_id = ?
+    GROUP BY o.id
+    ORDER BY o.created_at DESC
+  `;
+
+  db.query(query, [sellerId], (err, results) => {
+    if (err) {
+      console.error('Error fetching seller orders:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    return res.json(results);
+  });
+});
+
 module.exports = router;
