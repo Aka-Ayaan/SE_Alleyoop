@@ -64,6 +64,12 @@ const BOOKINGS_DATA = [
     },
 ];
 
+const VENUE_POSTS = [
+    { id: 'v1', user: { name: 'CourtKing Arena', image: require('../../../assets/tennis.png'), rating: '4.8', timings: '8:00 AM - 11:00 PM', location: 'Karachi, DHA', sports: ['Basketball', 'Tennis'], isAvailable: true } },
+    { id: 'v2', user: { name: 'HoopZone', image: require('../../../assets/tennis.png'), rating: '4.5', timings: '9:00 AM - 12:00 AM', location: 'Lahore, Gulberg', sports: ['Basketball', '3x3'], isAvailable: false } },
+    { id: 'v3', user: { name: 'ProArena Clifton', image: require('../../../assets/tennis.png'), rating: '4.9', timings: '7:00 AM - 11:00 PM', location: 'Karachi, Clifton', sports: ['Tennis', 'Padel'], isAvailable: true } },
+];
+
 // ─── Form Inputs ─────────────────────────────────────────────────────────────
 
 const FormInput = memo(({ label, value, onChangeText, placeholder, ...props }) => (
@@ -80,7 +86,7 @@ const FormInput = memo(({ label, value, onChangeText, placeholder, ...props }) =
     </View>
 ));
 
-const SportDropdown = memo(({ selectedSports, onToggleSport }) => {
+const SportDropdown = memo(({ selectedSports, onToggleSport, isReadOnly }) => {
     const [isOpen, setIsOpen] = useState(false);
     const allSports = ['Basketball', 'Tennis', 'Futsal', 'Padel', 'Cricket', 'Badminton', '3x3'];
 
@@ -91,6 +97,7 @@ const SportDropdown = memo(({ selectedSports, onToggleSport }) => {
                 style={styles.dropdownHeader}
                 onPress={() => setIsOpen(!isOpen)}
                 activeOpacity={0.8}
+                disabled={isReadOnly}
             >
                 <Text style={selectedSports.length ? styles.dropdownHeaderText : styles.placeholderText}>
                     {selectedSports.length ? selectedSports.join(', ') : 'Choose sports...'}
@@ -119,14 +126,41 @@ const SportDropdown = memo(({ selectedSports, onToggleSport }) => {
     );
 });
 
+const VenuePicker = ({ venues, onSelect, actionLabel, icon }) => (
+    <ScrollView contentContainerStyle={styles.formScroll}>
+        <Text style={[styles.sectionLabel, { marginBottom: 20 }]}>Select a Venue to {actionLabel}</Text>
+        {venues.length === 0 ? (
+            <View style={styles.emptyState}>
+                <Text style={{ color: C.brown }}>No venues added yet.</Text>
+            </View>
+        ) : (
+            venues.map(item => (
+                <TouchableOpacity
+                    key={item.id}
+                    style={styles.card}
+                    onPress={() => onSelect(item)}
+                >
+                    <Image source={item.user.image} style={{ width: 50, height: 50, borderRadius: 10, marginRight: 15 }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.cardText}>{item.user.name}</Text>
+                        <Text style={styles.subLabel}>{item.user.location}</Text>
+                    </View>
+                    <MaterialCommunityIcons name={icon} size={24} color={C.orange} />
+                </TouchableOpacity>
+            ))
+        )}
+    </ScrollView>
+);
+
 // ─── Tab screens ─────────────────────────────────────────────────────────────
 
-function AddVenueForm({ onBack, onSave }) {
-    const [name, setName] = useState('');
-    const [location, setLocation] = useState('');
-    const [image, setImage] = useState(null);
-    const [selectedSports, setSelectedSports] = useState([]);
-    const [isAvailable, setIsAvailable] = useState(true);
+function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
+    // Initialize states with initialData if it exists
+    const [name, setName] = useState(initialData?.user?.name || '');
+    const [location, setLocation] = useState(initialData?.user?.location || '');
+    const [image, setImage] = useState(initialData?.user?.image?.uri || null);
+    const [gallery, setGallery] = useState(initialData?.user?.gallery?.map(g => g.uri) || []);
+    const [selectedSports, setSelectedSports] = useState(initialData?.user?.sports || []);
 
     // Time Picker States
     const [startTime, setStartTime] = useState(new Date(new Date().setHours(8, 0, 0)));
@@ -143,6 +177,8 @@ function AddVenueForm({ onBack, onSave }) {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     };
 
+    const isReadOnly = mode === 'view';
+
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: 'images',
@@ -153,95 +189,138 @@ function AddVenueForm({ onBack, onSave }) {
         if (!result.canceled) setImage(result.assets[0].uri);
     };
 
-    const handleSave = () => {
-        if (!name || !location || !image || selectedSports.length === 0) {
-            alert('Please fill all fields, select at least one sport, and add an image.');
+    // Pick Gallery Images (Up to 5)
+    const pickGalleryImages = async () => {
+        const remainingSlots = 5 - gallery.length;
+        if (remainingSlots <= 0) {
+            alert("You can only add up to 5 gallery images.");
             return;
         }
 
-        const newVenue = {
-            id: Date.now().toString(),
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsMultipleSelection: true, // Allow multiple
+            selectionLimit: remainingSlots,
+            quality: 0.6,
+        });
+
+        if (!result.canceled) {
+            const newUris = result.assets.map(asset => asset.uri);
+            setGallery(prev => [...prev, ...newUris].slice(0, 5));
+        }
+    };
+
+    const removeGalleryImage = (index) => {
+        setGallery(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleSave = () => {
+        const venueObj = {
+            id: initialData?.id || Date.now().toString(), // Keep old ID if updating
             user: {
                 name,
-                image: { uri: image },
-                rating: '5.0',
-                timings: `${formatTime(startTime)} - ${formatTime(endTime)}`,
                 location,
+                image: typeof image === 'string' ? { uri: image } : image,
                 sports: selectedSports,
-                isAvailable
+                timings: `${formatTime(startTime)} - ${formatTime(endTime)}`,
+                rating: initialData?.user?.rating || '5.0',
+                isAvailable: true
             }
         };
-        onSave(newVenue);
+        onSave(venueObj);
     };
 
     return (
-        <KeyboardAvoidingView padding={'height'} style={styles.formContainer}>
-            <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <Text style={styles.sectionLabel}>Venue Display Image</Text>
-                <TouchableOpacity style={styles.imagePickerFrame} onPress={pickImage}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.formContainer}>
+            <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+
+                {/* Thumbnail */}
+                <Text style={styles.sectionLabel}>Venue Thumbnail</Text>
+                <TouchableOpacity
+                    style={styles.imagePickerFrame}
+                    onPress={isReadOnly ? null : pickImage}
+                    disabled={isReadOnly}
+                >
                     {image ? <Image source={{ uri: image }} style={styles.previewImage} /> : (
                         <View style={styles.imagePlaceholder}>
                             <MaterialCommunityIcons name="camera-plus" size={40} color={C.brown + '44'} />
-                            <Text style={styles.placeholderText}>Upload Landscape Photo</Text>
                         </View>
                     )}
                 </TouchableOpacity>
 
-                <FormInput label="Venue Name" value={name} onChangeText={setName} placeholder="e.g. CourtKing Arena" />
-                <FormInput label="Location" value={location} onChangeText={setLocation} placeholder="e.g. Karachi, DHA" />
+                {/* Gallery */}
+                <Text style={styles.sectionLabel}>Gallery ({gallery.length}/5)</Text>
+                <View style={styles.galleryContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {gallery.map((uri, index) => (
+                            <View key={index} style={styles.galleryWrapper}>
+                                <Image source={{ uri }} style={styles.galleryImage} />
+                                {!isReadOnly && (
+                                    <TouchableOpacity style={styles.removeIcon} onPress={() => removeGalleryImage(index)}>
+                                        <MaterialCommunityIcons name="close-circle" size={20} color="red" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        ))}
+                        {!isReadOnly && gallery.length < 5 && (
+                            <TouchableOpacity style={styles.addGalleryButton} onPress={pickGalleryImages}>
+                                <MaterialCommunityIcons name="plus" size={30} color="#888" />
+                            </TouchableOpacity>
+                        )}
+                    </ScrollView>
+                </View>
 
+                <FormInput label="Venue Name" value={name} onChangeText={setName} editable={!isReadOnly} />
+                <FormInput label="Location" value={location} onChangeText={setLocation} editable={!isReadOnly} />
+
+                {/* Operating Hours */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Operating Hours</Text>
                     <View style={styles.timeRow}>
-                        <TouchableOpacity style={styles.timeButton} onPress={() => setShowPicker('start')}>
-                            <Text style={styles.timeLabel}>From</Text>
+                        <TouchableOpacity
+                            style={styles.timeButton}
+                            onPress={() => !isReadOnly && setShowPicker('start')}
+                        >
                             <Text style={styles.timeValue}>{formatTime(startTime)}</Text>
                         </TouchableOpacity>
-
                         <View style={styles.timeDivider} />
-
-                        <TouchableOpacity style={styles.timeButton} onPress={() => setShowPicker('end')}>
-                            <Text style={styles.timeLabel}>To</Text>
+                        <TouchableOpacity
+                            style={styles.timeButton}
+                            onPress={() => !isReadOnly && setShowPicker('end')}
+                        >
                             <Text style={styles.timeValue}>{formatTime(endTime)}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
-                <SportDropdown selectedSports={selectedSports} onToggleSport={onToggleSport} />
+                <SportDropdown selectedSports={selectedSports} onToggleSport={onToggleSport} isReadOnly={isReadOnly} />
 
-                {/* <View style={styles.rowBetween}>
-                    <View>
-                        <Text style={styles.label}>Currently Available?</Text>
-                        <Text style={styles.subLabel}>Show users if court is open</Text>
-                    </View>
-                    <Switch value={isAvailable} onValueChange={setIsAvailable} trackColor={{ false: '#767577', true: C.orange }} />
-                </View> */}
-
-                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                    <Text style={styles.saveButtonText}>Create Venue</Text>
-                </TouchableOpacity>
+                {mode !== 'view' && (
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                        <Text style={styles.saveButtonText}>
+                            {mode === 'add' ? 'Create Venue' : 'Update Venue'}
+                        </Text>
+                    </TouchableOpacity>
+                )}
 
                 {showPicker && (
                     <DateTimePicker
                         value={showPicker === 'start' ? startTime : endTime}
                         mode="time"
-                        is24Hour={false}
-                        display="default"
-                        onChange={(event, selectedDate) => {
+                        onChange={(event, date) => {
                             setShowPicker(null);
-                            if (selectedDate) {
-                                showPicker === 'start' ? setStartTime(selectedDate) : setEndTime(selectedDate);
-                            }
+                            if (date) showPicker === 'start' ? setStartTime(date) : setEndTime(date);
                         }}
                     />
                 )}
             </ScrollView>
-        </KeyboardAvoidingView >
+        </KeyboardAvoidingView>
     );
 }
 
-function SubScreenContent({ type, id, data, onBack }) {
+function SubScreenContent({ type, id, onBack, venues, setVenues }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
+    const [selectedVenue, setSelectedVenue] = useState(null);
 
     // Labels for the sub-screens
     const getTitle = () => {
@@ -253,39 +332,77 @@ function SubScreenContent({ type, id, data, onBack }) {
         return 'Details';
     };
 
-    return (
-        <View style={[styles.formContainer, { paddingBottom: Math.max(insets.bottom, 20) + 5 }]}>
+    // Helper: Update local venue list
+    const handleSaveVenue = (updatedVenue) => {
+        if (id === '1') { // Add
+            setVenues(prev => [...prev, updatedVenue]);
+        } else { // Update
+            setVenues(prev => prev.map(v => v.id === updatedVenue.id ? updatedVenue : v));
+        }
+        onBack();
+    };
 
-            <View style={styles.arcContainer} pointerEvents="none">
-                <View style={styles.arcInner} />
-                <View style={styles.halfCircle} />
-            </View>
+    const handleRemoveVenue = (venueId) => {
+        setVenues(prev => prev.filter(v => v.id !== venueId));
+        onBack();
+    };
 
-            <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>{getTitle()}</Text>
-            </View>
+    const renderContent = () => {
+        // Mode 1: Add Venue
+        if (id === '1') {
+            return <AddVenueForm mode="add" onSave={handleSaveVenue} onBack={onBack} />;
+        }
 
-            <ScrollView contentContainerStyle={styles.formScroll}>
-                <View style={styles.placeholderForm}>
-                    <AddVenueForm
-                        onBack={() => setActiveAction(null)}
-                        onSave={(newVenue) => {
-                            console.log("New Venue Object Ready:", newVenue);
-                            // Here you would call your backend API to save it
-                            setActiveAction(null);
-                        }}
-                    />
-                    <View style={styles.divider}>
-                        <View style={styles.dividerLine} />
-                        <View style={styles.dividerLine} />
-                    </View>
+        // Mode 2, 3, 4: Requires selection first
+        if (!selectedVenue) {
+            const labels = { '2': 'Update', '3': 'View', '4': 'Remove' };
+            const icons = { '2': 'pencil', '3': 'eye', '4': 'delete' };
+            return (
+                <VenuePicker
+                    venues={venues}
+                    actionLabel={labels[id]}
+                    icon={icons[id]}
+                    onSelect={setSelectedVenue}
+                />
+            );
+        }
 
-                    <TouchableOpacity style={styles.submitBtn} onPress={onBack}>
-                        <Text style={styles.submitBtnText}>Done</Text>
+        // Once a venue is selected:
+        if (id === '2') return <AddVenueForm mode="edit" initialData={selectedVenue} onSave={handleSaveVenue} onBack={onBack} />;
+        if (id === '3') return <AddVenueForm mode="view" initialData={selectedVenue} onBack={onBack} />;
+        if (id === '4') {
+            return (
+                <View style={styles.formScroll}>
+                    <Text style={styles.headerText}>Are you sure?</Text>
+                    <Text style={[styles.placeholderText, { marginBottom: 30 }]}>
+                        You are about to delete "{selectedVenue.user.name}". This action cannot be undone.
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.saveButton, { backgroundColor: 'red' }]}
+                        onPress={() => handleRemoveVenue(selectedVenue.id)}
+                    >
+                        <Text style={styles.saveButtonText}>Yes, Delete Venue</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.submitBtn, { backgroundColor: C.bg }]} onPress={() => setSelectedVenue(null)}>
+                        <Text style={[styles.submitBtnText, { color: C.brown }]}>Cancel</Text>
                     </TouchableOpacity>
                 </View>
+            );
+        }
+    };
 
-            </ScrollView>
+    return (
+        <View style={styles.subScreenContainer}>
+            <View style={styles.subScreenHeader}>
+                {/* <TouchableOpacity onPress={selectedVenue ? () => setSelectedVenue(null) : onBack} style={styles.backButton}>
+                    <MaterialCommunityIcons name="chevron-left" size={24} color={C.white} />
+                    <Text style={{ color: 'white' }}>{selectedVenue ? 'Back to Selection' : 'Exit'}</Text>
+                </TouchableOpacity> */}
+                <Text style={styles.subScreenTitle}>
+                    {id === '1' ? 'Add Venue' : id === '2' ? 'Update Venue' : id === '3' ? 'Venue Details' : 'Remove Venue'}
+                </Text>
+            </View>
+            {renderContent()}
         </View>
     );
 }
@@ -537,6 +654,8 @@ export function OwnerHomeScreen({ user, onLogout }) {
     const [activeSubScreen, setActiveSubScreen] = useState(null);
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
+    // Shared state for all venues
+    const [venues, setVenues] = useState(VENUE_POSTS);
 
     const goToTab = useCallback((index) => {
         setActiveSubScreen(null); // Reset when switching tabs
@@ -643,7 +762,10 @@ export function OwnerHomeScreen({ user, onLogout }) {
             {/* Conditional Main Body */}
             {activeSubScreen ? (
                 <SubScreenContent
-                    {...activeSubScreen}
+                    type={activeSubScreen.type}
+                    id={activeSubScreen.id}
+                    venues={venues}
+                    setVenues={setVenues}
                     onBack={() => setActiveSubScreen(null)}
                 />
             ) : (
@@ -1172,15 +1294,15 @@ const styles = StyleSheet.create({
 
     // ── Subscreen ──────────────────────────────────────────────────────────
 
-    formContainer: {
+    subScreenContainer: {
         flex: 1,
         backgroundColor: C.white,
     },
-    formHeader: {
+    subScreenHeader: {
         padding: 20,
         borderBottomWidth: 1,
         borderBottomColor: C.border,
-        backgroundColor: C.bg + '33',
+        backgroundColor: C.brown,
     },
     backButton: {
         flexDirection: 'row',
@@ -1192,7 +1314,7 @@ const styles = StyleSheet.create({
         color: C.brown,
         fontWeight: '600',
     },
-    formTitle: {
+    subScreenTitle: {
         fontSize: 22,
         fontWeight: '800',
         color: C.orange,
@@ -1228,6 +1350,53 @@ const styles = StyleSheet.create({
     rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border, marginBottom: 30 },
     saveButton: { backgroundColor: C.brown, borderRadius: 14, paddingVertical: 16, alignItems: 'center', elevation: 4 },
     saveButtonText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+
+    // Gallery
+    galleryContainer: {
+        flexDirection: 'row',
+        marginBottom: 20,
+    },
+    galleryWrapper: {
+        position: 'relative',
+        marginRight: 12,
+    },
+    galleryImage: {
+        width: 100,
+        height: 100,
+        borderRadius: 12,
+        backgroundColor: '#eee'
+    },
+    removeIcon: {
+        position: 'absolute',
+        top: -5,
+        right: -5,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        marginTop: 4,
+        marginRight: 4,
+    },
+    addGalleryButton: {
+        width: 100,
+        height: 100,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: '#ccc',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: C.bg
+    },
+    // imagePickerFrame: {
+    //     width: '100%',
+    //     height: 180,
+    //     borderRadius: 15,
+    //     overflow: 'hidden',
+    //     backgroundColor: '#f0f0f0',
+    // },
+    previewImage: {
+        width: '100%',
+        height: '100%',
+    },
 
     placeholderForm: {
         paddingTop: 10,
