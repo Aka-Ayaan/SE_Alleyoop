@@ -163,6 +163,8 @@ CREATE TABLE IF NOT EXISTS arenas (
 	availability ENUM('available', 'unavailable', 'closed') DEFAULT 'available',
 	rating DECIMAL(3,2) DEFAULT 0.00,
 	timing VARCHAR(100),
+	total_courts INT DEFAULT 1,
+	sports JSON,
 	amenities JSON,
 	description TEXT,
 	rules JSON,
@@ -179,20 +181,6 @@ CREATE TABLE IF NOT EXISTS arena_images (
 );
 
 
-CREATE TABLE IF NOT EXISTS courts (
-	id INT AUTO_INCREMENT PRIMARY KEY,
-	arena_id INT NOT NULL,
-	court_type_id INT NOT NULL,
-	name VARCHAR(100),
-	image_path VARCHAR(255),
-	pricePerHour INT DEFAULT NULL,
-	is_indoor TINYINT(1) DEFAULT 0,
-	is_active TINYINT(1) DEFAULT 1,
-	FOREIGN KEY (arena_id) REFERENCES arenas(id),
-	FOREIGN KEY (court_type_id) REFERENCES court_types(id)
-);
-
-
 /* ==========================================================
 	 Court Bookings
 ========================================================== */
@@ -200,7 +188,8 @@ CREATE TABLE IF NOT EXISTS courts (
 CREATE TABLE IF NOT EXISTS bookings (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	player_id INT NOT NULL,
-	court_id INT NOT NULL,
+	arena_id INT NOT NULL,
+	court_type_id INT NOT NULL,
 	booking_date DATE NOT NULL,
 	start_time TIME NOT NULL,
 	end_time TIME NOT NULL,
@@ -208,7 +197,8 @@ CREATE TABLE IF NOT EXISTS bookings (
 	participants_count INT DEFAULT 1,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (player_id) REFERENCES players(id),
-	FOREIGN KEY (court_id) REFERENCES courts(id),
+	FOREIGN KEY (arena_id) REFERENCES arenas(id),
+	FOREIGN KEY (court_type_id) REFERENCES court_types(id),
 	FOREIGN KEY (status_id) REFERENCES booking_status(id)
 );
 
@@ -286,7 +276,7 @@ CREATE TABLE IF NOT EXISTS trainer_time_slots (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	trainer_id INT NOT NULL,
 	arena_id INT NOT NULL,
-	court_id INT DEFAULT NULL,
+	court_type_id INT NOT NULL,
 	session_date DATE NOT NULL,
 	start_time TIME NOT NULL,
 	end_time TIME NOT NULL,
@@ -297,7 +287,7 @@ CREATE TABLE IF NOT EXISTS trainer_time_slots (
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (trainer_id) REFERENCES trainers(id),
 	FOREIGN KEY (arena_id) REFERENCES arenas(id),
-	FOREIGN KEY (court_id) REFERENCES courts(id)
+	FOREIGN KEY (court_type_id) REFERENCES court_types(id)
 );
 
 
@@ -441,7 +431,8 @@ VALUES (
 
 INSERT INTO arenas (
 	owner_id, name, city, address, pricePerHour, availability, rating, timing,
-	amenities, description, rules
+	total_courts,
+	sports, amenities, description, rules
 )
 VALUES (
 	1,
@@ -452,16 +443,80 @@ VALUES (
 	'available',
 	4.50,
 	'8 AM - 11 PM',
+	4,
+	JSON_ARRAY('Basketball', 'Futsal', 'Padel'),
 	JSON_ARRAY('Changing Rooms', 'Showers', 'Parking'),
 	'A multi‑sport facility for Alleyoop testing.',
 	JSON_ARRAY('Proper sports shoes required', 'Arrive 10 minutes early')
 );
-
--- Dummy courts
-INSERT INTO courts (arena_id, court_type_id, name, image_path, pricePerHour, is_indoor)
+ 
+-- Additional dummy arenas for testing
+INSERT INTO arenas (
+	owner_id, name, city, address, pricePerHour, availability, rating, timing,
+	total_courts,
+	sports, amenities, description, rules
+)
 VALUES
-(1, 4, 'Futsal Court 1', '/assets/courts/alleyoopFutsal1.png', 4000, 0),
-(1, 1, 'Padel Court 1', '/assets/courts/alleyoopPadel1.png', 4500, 1);
+(
+	1,
+	'Downtown Futsal Arena',
+	'Karachi',
+	'Downtown Street 12',
+	3500,
+	'available',
+	4.20,
+	'6 AM - 12 AM',
+	3,
+	JSON_ARRAY('Futsal'),
+	JSON_ARRAY('Parking', 'Cafeteria'),
+	'Indoor and outdoor futsal courts suitable for 5v5 games.',
+	JSON_ARRAY('Non-marking shoes only', 'No food or drink on court')
+),
+(
+	1,
+	'Clifton Tennis Club',
+	'Karachi',
+	'Clifton Block 2',
+	3000,
+	'available',
+	4.70,
+	'7 AM - 10 PM',
+	5,
+	JSON_ARRAY('Tennis'),
+	JSON_ARRAY('Changing Rooms', 'Showers', 'Parking', 'Pro Shop'),
+	'Premium tennis facility with clay and hard courts.',
+	JSON_ARRAY('Tennis shoes required', 'Coaching sessions must be pre-booked')
+),
+(
+	1,
+	'North Karachi Sports Arena',
+	'Karachi',
+	'North Karachi Sector 11',
+	2500,
+	'available',
+	4.10,
+	'9 AM - 11 PM',
+	6,
+	JSON_ARRAY('Futsal', 'Basketball'),
+	JSON_ARRAY('Parking', 'Refreshments'),
+	'Community sports arena with futsal and basketball courts.',
+	JSON_ARRAY('No outside food allowed', 'Arrive 15 minutes early')
+),
+(
+	1,
+	'Gulshan Multi-Sport Complex',
+	'Karachi',
+	'Gulshan-e-Iqbal Block 3',
+	4200,
+	'available',
+	4.35,
+	'8 AM - 1 AM',
+	8,
+	JSON_ARRAY('Basketball', 'Badminton', 'Futsal'),
+	JSON_ARRAY('Changing Rooms', 'Showers', 'Parking', 'Cafeteria'),
+	'Large multi-sport complex ideal for leagues and tournaments.',
+	JSON_ARRAY('Full advance payment required', 'Respect staff and other players')
+);
 
 
 -- Example matchmaking request
@@ -480,5 +535,62 @@ VALUES (
 	10,        -- 5v5
 	2,         -- Intermediate
 	3          -- Advanced
+);
+
+-- Dummy court bookings for testing
+INSERT INTO bookings (
+	player_id, arena_id, court_type_id, booking_date, start_time, end_time,
+	status_id, participants_count
+)
+VALUES
+(
+	1,
+	1,
+	4, -- Futsal
+	'2025-12-05',
+	'18:00:00',
+	'19:00:00',
+	2, -- confirmed
+	10
+),
+(
+	1,
+	1,
+	6, -- Basketball
+	'2025-12-06',
+	'20:00:00',
+	'21:30:00',
+	1, -- pending
+	4
+),
+(
+	1,
+	2,
+	4, -- Futsal
+	'2025-12-07',
+	'17:00:00',
+	'18:30:00',
+	2, -- confirmed
+	8
+),
+(
+	1,
+	3,
+	1, -- Padel
+	'2025-12-08',
+	'19:00:00',
+	'20:00:00',
+	4, -- completed
+	2
+),
+(
+	1,
+	4,
+	7, -- Football 5-a-side
+	'2025-12-09',
+	'07:00:00',
+	'08:00:00',
+	2, -- confirmed
+	10
 );
 

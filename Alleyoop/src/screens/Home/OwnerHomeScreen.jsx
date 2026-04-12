@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, memo, useEffect } from 'react';
 import {
     View,
     Text,
@@ -18,11 +18,14 @@ import {
     Touchable,
     Modal,
     FlatList,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { API_BASE_URL } from '../../config/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,31 +47,7 @@ const TABS = [
     { id: 'profile', label: 'Profile', icon: 'account-circle-outline', activeIcon: 'account-circle' },
 ];
 
-// ─── Placeholder data ────────────────────────────────────────────────────────
-
-const BOOKINGS_DATA = [
-    {
-        title: 'Today',
-        data: [
-            { id: 'b1', customer: 'Ahmed Khan', time: '04:00 PM - 05:00 PM', venue: 'CourtKing Arena', status: 'Confirmed', price: 'Rs. 2,500' },
-            { id: 'b2', customer: 'Sara Williams', time: '07:30 PM - 09:00 PM', venue: 'ProArena Clifton', status: 'Confirmed', price: 'Rs. 4,000' },
-        ],
-    },
-    {
-        title: 'Upcoming',
-        data: [
-            { id: 'b3', customer: 'Zain Malik', time: 'Oct 24, 05:00 PM', venue: 'HoopZone', status: 'Pending', price: 'Rs. 2,000' },
-            { id: 'b4', customer: 'Hamza Ali', time: 'Oct 25, 08:00 PM', venue: 'CourtKing Arena', status: 'Confirmed', price: 'Rs. 2,500' },
-            { id: 'b5', customer: 'Omar J.', time: 'Oct 26, 06:00 PM', venue: 'SkillLab PK', status: 'Confirmed', price: 'Rs. 3,200' },
-        ],
-    },
-];
-
-const VENUE_POSTS = [
-    { id: 'v1', user: { name: 'CourtKing Arena', image: require('../../../assets/tennis.png'), rating: '4.8', timings: '8:00 AM - 11:00 PM', location: 'Karachi, DHA', sports: ['Basketball', 'Tennis'], isAvailable: true } },
-    { id: 'v2', user: { name: 'HoopZone', image: require('../../../assets/tennis.png'), rating: '4.5', timings: '9:00 AM - 12:00 AM', location: 'Lahore, Gulberg', sports: ['Basketball', '3x3'], isAvailable: false } },
-    { id: 'v3', user: { name: 'ProArena Clifton', image: require('../../../assets/tennis.png'), rating: '4.9', timings: '7:00 AM - 11:00 PM', location: 'Karachi, Clifton', sports: ['Tennis', 'Padel'], isAvailable: true } },
-];
+// Note: venues are fully loaded from the backend; no static VENUE_POSTS.
 
 // ─── Form Inputs ─────────────────────────────────────────────────────────────
 
@@ -154,13 +133,17 @@ const VenuePicker = ({ venues, onSelect, actionLabel, icon }) => (
 
 // ─── Tab screens ─────────────────────────────────────────────────────────────
 
-function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
+function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerId }) {
     // Initialize states with initialData if it exists
     const [name, setName] = useState(initialData?.user?.name || '');
     const [location, setLocation] = useState(initialData?.user?.location || '');
-    const [image, setImage] = useState(initialData?.user?.image?.uri || null);
-    const [gallery, setGallery] = useState(initialData?.user?.gallery?.map(g => g.uri) || []);
+    // Thumbnail and gallery keep both uri and optional backend path
+    const [thumbnail, setThumbnail] = useState(initialData?.user?.image || null);
+    const [gallery, setGallery] = useState(initialData?.user?.gallery || []);
     const [selectedSports, setSelectedSports] = useState(initialData?.user?.sports || []);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const errorShake = useRef(new Animated.Value(0)).current;
 
     // Time Picker States
     const [startTime, setStartTime] = useState(new Date(new Date().setHours(8, 0, 0)));
@@ -177,6 +160,16 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     };
 
+    const shakeError = () => {
+        Animated.sequence([
+            Animated.timing(errorShake, { toValue: 10, duration: 60, useNativeDriver: true }),
+            Animated.timing(errorShake, { toValue: -10, duration: 60, useNativeDriver: true }),
+            Animated.timing(errorShake, { toValue: 6, duration: 60, useNativeDriver: true }),
+            Animated.timing(errorShake, { toValue: -6, duration: 60, useNativeDriver: true }),
+            Animated.timing(errorShake, { toValue: 0, duration: 60, useNativeDriver: true }),
+        ]).start();
+    };
+
     const isReadOnly = mode === 'view';
 
     const pickImage = async () => {
@@ -186,7 +179,9 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
             aspect: [16, 9],
             quality: 0.7,
         });
-        if (!result.canceled) setImage(result.assets[0].uri);
+        if (!result.canceled) {
+            setThumbnail({ uri: result.assets[0].uri, isLocal: true });
+        }
     };
 
     // Pick Gallery Images (Up to 5)
@@ -205,8 +200,8 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
         });
 
         if (!result.canceled) {
-            const newUris = result.assets.map(asset => asset.uri);
-            setGallery(prev => [...prev, ...newUris].slice(0, 5));
+            const newItems = result.assets.map(asset => ({ uri: asset.uri, isLocal: true }));
+            setGallery(prev => [...prev, ...newItems].slice(0, 5));
         }
     };
 
@@ -214,20 +209,236 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
         setGallery(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleSave = () => {
-        const venueObj = {
-            id: initialData?.id || Date.now().toString(), // Keep old ID if updating
-            user: {
-                name,
-                location,
-                image: typeof image === 'string' ? { uri: image } : image,
-                sports: selectedSports,
-                timings: `${formatTime(startTime)} - ${formatTime(endTime)}`,
-                rating: initialData?.user?.rating || '5.0',
-                isAvailable: true
+    const handleSave = async () => {
+        if (mode === 'view') return;
+
+        // Basic validation: all visible fields must have a value
+        if (!name.trim() || !location.trim() || selectedSports.length === 0 || !thumbnail || gallery.length === 0) {
+            setError('Please fill in all fields, pick a thumbnail, and add at least one gallery image.');
+            shakeError();
+            return;
+        }
+
+        setError('');
+
+        const timings = `${formatTime(startTime)} - ${formatTime(endTime)}`;
+
+        const arenaId = initialData?.id;
+
+        // Edit mode: update existing arena + sync images
+        if (mode === 'edit' && arenaId) {
+            try {
+                setLoading(true);
+                const originalThumbPath = initialData?.user?.image?.path || null;
+                const originalGallery = initialData?.user?.gallery || [];
+                const originalPaths = [
+                    originalThumbPath,
+                    ...originalGallery.map(g => g.path),
+                ].filter(Boolean);
+
+                const keptPaths = [];
+                if (thumbnail && !thumbnail.isLocal && thumbnail.path) {
+                    keptPaths.push(thumbnail.path);
+                }
+                gallery.forEach(g => {
+                    if (!g.isLocal && g.path) {
+                        keptPaths.push(g.path);
+                    }
+                });
+
+                const pathsToDelete = originalPaths.filter(p => !keptPaths.includes(p));
+
+                const newThumbUri = thumbnail && thumbnail.isLocal ? thumbnail.uri : null;
+                const newGalleryUris = gallery.filter(g => g.isLocal).map(g => g.uri);
+
+                // 1) Update arena core fields
+                const updateResponse = await fetch(`${API_BASE_URL}/arena/owner/${arenaId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name,
+                        city: location,
+                        address: location,
+                        pricePerHour: initialData?.user?.pricePerHour || 0,
+                        timing: timings,
+                        sports: selectedSports,
+                        amenities: [],
+                        description: '',
+                        rules: [],
+                        availability: initialData?.user?.availability || 'available',
+                    }),
+                });
+
+                const updateData = await updateResponse.json();
+                if (!updateResponse.ok) {
+                    throw new Error(updateData.error || 'Failed to update venue');
+                }
+
+                // 2) Delete removed images (if any)
+                if (pathsToDelete.length > 0) {
+                    const deleteResponse = await fetch(`${API_BASE_URL}/arena/${arenaId}/images`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ paths: pathsToDelete }),
+                    });
+
+                    const deleteData = await deleteResponse.json();
+                    if (!deleteResponse.ok) {
+                        throw new Error(deleteData.error || 'Failed to delete images');
+                    }
+                }
+
+                // 3) Upload any new images
+                if (newThumbUri || newGalleryUris.length > 0) {
+                    const formData = new FormData();
+
+                    if (newThumbUri) {
+                        formData.append('thumbnail', {
+                            uri: newThumbUri,
+                            name: 'thumbnail.jpg',
+                            type: 'image/jpeg',
+                        });
+                    }
+
+                    newGalleryUris.forEach((uri, index) => {
+                        formData.append('gallery', {
+                            uri,
+                            name: `gallery-${index + 1}.jpg`,
+                            type: 'image/jpeg',
+                        });
+                    });
+
+                    const uploadResponse = await fetch(`${API_BASE_URL}/arena/${arenaId}/images`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                        },
+                        body: formData,
+                    });
+
+                    const uploadData = await uploadResponse.json();
+                    if (!uploadResponse.ok) {
+                        throw new Error(uploadData.error || 'Failed to upload images');
+                    }
+                }
+
+                const venueObj = {
+                    id: arenaId,
+                    user: {
+                        name,
+                        location,
+                        image: thumbnail,
+                        gallery,
+                        sports: selectedSports,
+                        timings,
+                        rating: initialData?.user?.rating || '5.0',
+                        isAvailable: true,
+                    },
+                };
+
+                onSave(venueObj);
+            } catch (err) {
+                setError(err.message || 'Something went wrong while updating the venue.');
+                shakeError();
+            } finally {
+                setLoading(false);
             }
-        };
-        onSave(venueObj);
+            return;
+        }
+
+        // Add-mode: create arena in backend, then upload images
+        if (!ownerId) {
+            setError('Owner ID is missing. Please log in again.');
+            shakeError();
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // 1) Create arena
+            const createResponse = await fetch(`${API_BASE_URL}/arena/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    owner_id: ownerId,
+                    name,
+                    city: location,
+                    address: location,
+                    pricePerHour: '0', // default for now
+                    timing: timings,
+                    sports: selectedSports,
+                    amenities: [],
+                    description: '',
+                    rules: [],
+                }),
+            });
+
+            const createData = await createResponse.json();
+            if (!createResponse.ok) {
+                throw new Error(createData.error || 'Failed to create venue');
+            }
+
+            const newArenaId = createData.id;
+
+            // 2) Upload images (thumbnail + gallery)
+            const formData = new FormData();
+
+            if (thumbnail) {
+                formData.append('thumbnail', {
+                    uri: thumbnail.uri,
+                    name: 'thumbnail.jpg',
+                    type: 'image/jpeg',
+                });
+            }
+
+            gallery.forEach((g, index) => {
+                formData.append('gallery', {
+                    uri: g.uri,
+                    name: `gallery-${index + 1}.jpg`,
+                    type: 'image/jpeg',
+                });
+            });
+
+            const uploadResponse = await fetch(`${API_BASE_URL}/arena/${newArenaId}/images`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+                body: formData,
+            });
+
+            const uploadData = await uploadResponse.json();
+            if (!uploadResponse.ok) {
+                throw new Error(uploadData.error || 'Failed to upload images');
+            }
+
+            const venueObj = {
+                id: newArenaId,
+                user: {
+                    name,
+                    location,
+                    image: thumbnail,
+                    gallery,
+                    sports: selectedSports,
+                    timings,
+                    rating: '5.0',
+                    isAvailable: true,
+                },
+            };
+
+            onSave(venueObj);
+        } catch (err) {
+            setError(err.message || 'Something went wrong while creating the venue.');
+            shakeError();
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -241,7 +452,7 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
                     onPress={isReadOnly ? null : pickImage}
                     disabled={isReadOnly}
                 >
-                    {image ? <Image source={{ uri: image }} style={styles.previewImage} /> : (
+                    {thumbnail ? <Image source={{ uri: thumbnail.uri }} style={styles.previewImage} /> : (
                         <View style={styles.imagePlaceholder}>
                             <MaterialCommunityIcons name="camera-plus" size={40} color={C.brown + '44'} />
                         </View>
@@ -252,9 +463,9 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
                 <Text style={styles.sectionLabel}>Gallery ({gallery.length}/5)</Text>
                 <View style={styles.galleryContainer}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {gallery.map((uri, index) => (
+                        {gallery.map((item, index) => (
                             <View key={index} style={styles.galleryWrapper}>
-                                <Image source={{ uri }} style={styles.galleryImage} />
+                                <Image source={{ uri: item.uri }} style={styles.galleryImage} />
                                 {!isReadOnly && (
                                     <TouchableOpacity style={styles.removeIcon} onPress={() => removeGalleryImage(index)}>
                                         <MaterialCommunityIcons name="close-circle" size={20} color="red" />
@@ -295,11 +506,25 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
 
                 <SportDropdown selectedSports={selectedSports} onToggleSport={onToggleSport} isReadOnly={isReadOnly} />
 
+                {error ? (
+                    <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </Animated.View>
+                ) : null}
+
                 {mode !== 'view' && (
-                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                        <Text style={styles.saveButtonText}>
-                            {mode === 'add' ? 'Create Venue' : 'Update Venue'}
-                        </Text>
+                    <TouchableOpacity
+                        style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                        onPress={handleSave}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={C.white} />
+                        ) : (
+                            <Text style={styles.saveButtonText}>
+                                {mode === 'add' ? 'Create Venue' : 'Update Venue'}
+                            </Text>
+                        )}
                     </TouchableOpacity>
                 )}
 
@@ -318,19 +543,19 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add' }) {
     );
 }
 
-function SubScreenContent({ type, id, onBack, venues, setVenues }) {
+
+function SubScreenContent({ type, id, data, onBack, venues, setVenues, ownerId }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
     const [selectedVenue, setSelectedVenue] = useState(null);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const slideAnim = useRef(new Animated.Value(20)).current;
 
-    // Labels for the sub-screens
-    const getTitle = () => {
-        if (type === 'venue') {
-            return { '1': 'Add Venue', '2': 'Update Venue', '3': 'View Venue', '4': 'Remove Venue' }[id];
-        }
-        if (type === 'booking') return 'Booking Details';
-        if (type === 'profile') return id; // e.g., "Edit Profile"
-        return 'Details';
-    };
+    useEffect(() => {
+        Animated.parallel([
+            Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+            Animated.timing(slideAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+        ]).start();
+    }, []);
 
     // Helper: Update local venue list
     const handleSaveVenue = (updatedVenue) => {
@@ -342,15 +567,74 @@ function SubScreenContent({ type, id, onBack, venues, setVenues }) {
         onBack();
     };
 
-    const handleRemoveVenue = (venueId) => {
-        setVenues(prev => prev.filter(v => v.id !== venueId));
-        onBack();
+    const handleRemoveVenue = async (venueId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/arena/${venueId}`, {
+                method: 'DELETE',
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to delete venue');
+            }
+
+            setVenues(prev => prev.filter(v => v.id !== venueId));
+            onBack();
+        } catch (err) {
+            Alert.alert('Error', err.message || 'Something went wrong while deleting the venue.');
+        }
     };
 
-    const renderContent = () => {
+    const handleSelectVenue = async (venue) => {
+        // For update/view, fetch full details including images
+        if (type === 'venue' && (id === '2' || id === '3')) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/arena/get/${venue.id}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load venue details');
+                }
+
+                const images = data.images || [];
+                const thumbPath = images[0] || null;
+                const galleryPaths = images.slice(1);
+
+                const mapped = {
+                    id: data.id,
+                    user: {
+                        name: data.name,
+                        location: data.city,
+                        image: thumbPath
+                            ? { uri: `${API_BASE_URL}${thumbPath}`, path: thumbPath, isLocal: false }
+                            : null,
+                        gallery: galleryPaths.map(p => ({
+                            uri: `${API_BASE_URL}${p}`,
+                            path: p,
+                            isLocal: false,
+                        })),
+                        sports: data.sports || [],
+                        timings: data.timing || '',
+                        rating: data.rating != null ? String(data.rating) : '0.0',
+                        isAvailable: data.availability === 'available',
+                        pricePerHour: data.pricePerHour || 0,
+                        availability: data.availability || 'available',
+                    },
+                };
+
+                setSelectedVenue(mapped);
+            } catch (err) {
+                Alert.alert('Error', err.message || 'Could not load venue details. Please try again.');
+            }
+        } else {
+            setSelectedVenue(venue);
+        }
+    };
+
+    const renderVenueContent = () => {
         // Mode 1: Add Venue
         if (id === '1') {
-            return <AddVenueForm mode="add" onSave={handleSaveVenue} onBack={onBack} />;
+            return <AddVenueForm mode="add" onSave={handleSaveVenue} onBack={onBack} ownerId={ownerId} />;
         }
 
         // Mode 2, 3, 4: Requires selection first
@@ -362,14 +646,14 @@ function SubScreenContent({ type, id, onBack, venues, setVenues }) {
                     venues={venues}
                     actionLabel={labels[id]}
                     icon={icons[id]}
-                    onSelect={setSelectedVenue}
+                    onSelect={handleSelectVenue}
                 />
             );
         }
 
         // Once a venue is selected:
-        if (id === '2') return <AddVenueForm mode="edit" initialData={selectedVenue} onSave={handleSaveVenue} onBack={onBack} />;
-        if (id === '3') return <AddVenueForm mode="view" initialData={selectedVenue} onBack={onBack} />;
+        if (id === '2') return <AddVenueForm mode="edit" initialData={selectedVenue} onSave={handleSaveVenue} onBack={onBack} ownerId={ownerId} />;
+        if (id === '3') return <AddVenueForm mode="view" initialData={selectedVenue} onBack={onBack} ownerId={ownerId} />;
         if (id === '4') {
             return (
                 <View style={styles.formScroll}>
@@ -391,19 +675,68 @@ function SubScreenContent({ type, id, onBack, venues, setVenues }) {
         }
     };
 
+    const renderBookingContent = () => {
+        if (!data) return null;
+        const { customer, venue, time, status, price, sportName, bookingDate } = data;
+        return (
+            <View style={styles.formScroll}>
+                <Text style={styles.headerText}>Booking Details</Text>
+                <Text style={styles.label}>Player</Text>
+                <Text style={styles.bookingDetailText}>{customer || 'N/A'}</Text>
+                <Text style={[styles.label, { marginTop: 16 }]}>Venue</Text>
+                <Text style={styles.bookingDetailText}>{venue}</Text>
+                {sportName && (
+                    <>
+                        <Text style={[styles.label, { marginTop: 16 }]}>Sport</Text>
+                        <Text style={styles.bookingDetailText}>{sportName}</Text>
+                    </>
+                )}
+                {bookingDate && (
+                    <>
+                        <Text style={[styles.label, { marginTop: 16 }]}>Date</Text>
+                        <Text style={styles.bookingDetailText}>{bookingDate}</Text>
+                    </>
+                )}
+                <Text style={[styles.label, { marginTop: 16 }]}>Time</Text>
+                <Text style={styles.bookingDetailText}>{time}</Text>
+                <Text style={[styles.label, { marginTop: 16 }]}>Status</Text>
+                <Text style={styles.bookingDetailText}>{status}</Text>
+                {price && (
+                    <>
+                        <Text style={[styles.label, { marginTop: 16 }]}>Price</Text>
+                        <Text style={styles.bookingDetailText}>{price}</Text>
+                    </>
+                )}
+            </View>
+        );
+    };
+
+    const renderProfileContent = () => {
+        return (
+            <View style={styles.formScroll}>
+                <Text style={styles.headerText}>{id}</Text>
+                <Text style={styles.placeholderText}>Coming soon.</Text>
+        </View>
+        );
+    };
+
     return (
-        <View style={styles.subScreenContainer}>
+        <Animated.View
+            style={[styles.subScreenContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
             <View style={styles.subScreenHeader}>
-                {/* <TouchableOpacity onPress={selectedVenue ? () => setSelectedVenue(null) : onBack} style={styles.backButton}>
-                    <MaterialCommunityIcons name="chevron-left" size={24} color={C.white} />
-                    <Text style={{ color: 'white' }}>{selectedVenue ? 'Back to Selection' : 'Exit'}</Text>
-                </TouchableOpacity> */}
                 <Text style={styles.subScreenTitle}>
-                    {id === '1' ? 'Add Venue' : id === '2' ? 'Update Venue' : id === '3' ? 'Venue Details' : 'Remove Venue'}
+                    {type === 'venue'
+                        ? (id === '1' ? 'Add Venue' : id === '2' ? 'Update Venue' : id === '3' ? 'Venue Details' : 'Remove Venue')
+                        : type === 'booking'
+                            ? 'Booking Details'
+                            : id}
                 </Text>
             </View>
-            {renderContent()}
-        </View>
+            {type === 'venue' && renderVenueContent()}
+            {type === 'booking' && renderBookingContent()}
+            {type === 'profile' && renderProfileContent()}
+        </Animated.View>
     );
 }
 
@@ -448,20 +781,46 @@ function DashboardScreen({ onActionSelect }) {
     );
 }
 
-function BookingsScreen({ onBookingSelect }) {
+function BookingsScreen({ bookings, onBookingSelect }) {
     // 1. States for filtering
     const [statusFilter, setStatusFilter] = useState('All');
     const [venueFilter, setVenueFilter] = useState('All');
     const [timeFilter, setTimeFilter] = useState('All'); // All, Today, Upcoming
 
+    // Group raw bookings into Today / Upcoming sections
+    const sections = useMemo(() => {
+        const today = new Date().toISOString().slice(0, 10);
+        const todayItems = [];
+        const upcomingItems = [];
+
+        (bookings || []).forEach((b) => {
+            // Expect shape from backend: bookingId, arenaName, playerName, bookingDate, startTime, endTime, status, revenue, sportName
+            const id = String(b.bookingId);
+            const customer = b.playerName || 'Player';
+            const venue = b.arenaName;
+            const status = b.status === 'confirmed' || b.status === 'Confirmed' ? 'Confirmed' : 'Pending';
+            const price = b.revenue != null ? `Rs. ${Number(b.revenue).toLocaleString('en-PK')}` : 'Rs. 0';
+            const time = `${b.startTime?.slice(0, 5)} - ${b.endTime?.slice(0, 5)}`;
+            const item = { id, customer, venue, status, price, time, sportName: b.sportName, bookingDate: b.bookingDate };
+
+            if (b.bookingDate === today) todayItems.push(item);
+            else upcomingItems.push(item);
+        });
+
+        const result = [];
+        if (todayItems.length) result.push({ title: 'Today', data: todayItems });
+        if (upcomingItems.length) result.push({ title: 'Upcoming', data: upcomingItems });
+        return result;
+    }, [bookings]);
+
     // 2. Extract unique venues for the filter list
-    const uniqueVenues = ['All', ...new Set(BOOKINGS_DATA.flatMap(s => s.data.map(b => b.venue)))];
+    const uniqueVenues = ['All', ...new Set(sections.flatMap(s => s.data.map(b => b.venue)))];
     const statuses = ['All', 'Confirmed', 'Pending'];
     const timeOptions = ['All', 'Today', 'Upcoming'];
 
     // 3. Filter Logic
     const filteredSections = useMemo(() => {
-        return BOOKINGS_DATA.map(section => {
+        return sections.map(section => {
             // Check if this section matches the Time Filter
             if (timeFilter !== 'All' && section.title !== timeFilter) {
                 return { ...section, data: [] };
@@ -654,8 +1013,72 @@ export function OwnerHomeScreen({ user, onLogout }) {
     const [activeSubScreen, setActiveSubScreen] = useState(null);
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
-    // Shared state for all venues
-    const [venues, setVenues] = useState(VENUE_POSTS);
+    // Shared state for all venues (loaded from backend)
+    const [venues, setVenues] = useState([]);
+    // Bookings for this owner (loaded from backend)
+    const [ownerBookings, setOwnerBookings] = useState([]);
+    const [bookingsLoading, setBookingsLoading] = useState(false);
+
+    // Initial load: fetch arenas owned by this owner from backend with minimal fields
+    useEffect(() => {
+        const fetchVenues = async () => {
+            if (!user?.userId) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/arena/owner?ownerId=${user.userId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    console.error('Failed to load arenas for owner:', data.error || 'Unknown error');
+                    return;
+                }
+
+                const mapped = (data || []).map((item) => ({
+                    id: item.id,
+                    user: {
+                        name: item.name,
+                        location: item.city,
+                        image: item.image_path
+                            ? { uri: `${API_BASE_URL}${item.image_path}` }
+                            : null,
+                        rating: item.rating != null ? String(item.rating) : '0.0',
+                        isAvailable: item.availability === 'available',
+                        sports: item.sports || [],
+                        timings: item.timing || '',
+                    },
+                }));
+
+                setVenues(mapped);
+            } catch (err) {
+                console.error('Error fetching arenas for owner:', err);
+            }
+        };
+
+        fetchVenues();
+    }, [user?.userId]);
+
+    // Load bookings for all arenas owned by this owner
+    useEffect(() => {
+        const fetchBookings = async () => {
+            if (!user?.userId) return;
+            try {
+                setBookingsLoading(true);
+                const response = await fetch(`${API_BASE_URL}/bookings/owner?ownerId=${user.userId}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    console.error('Failed to load owner bookings:', data.error || 'Unknown error');
+                    return;
+                }
+                setOwnerBookings(data || []);
+            } catch (err) {
+                console.error('Error fetching owner bookings:', err);
+            } finally {
+                setBookingsLoading(false);
+            }
+        };
+
+        fetchBookings();
+    }, [user?.userId]);
 
     const goToTab = useCallback((index) => {
         setActiveSubScreen(null); // Reset when switching tabs
@@ -702,6 +1125,7 @@ export function OwnerHomeScreen({ user, onLogout }) {
         />,
         <BookingsScreen
             key="bookings"
+            bookings={ownerBookings}
             onBookingSelect={(booking) => setActiveSubScreen({ type: 'booking', id: booking.id, data: booking })}
         />,
         <ProfileScreen
@@ -766,6 +1190,7 @@ export function OwnerHomeScreen({ user, onLogout }) {
                     id={activeSubScreen.id}
                     venues={venues}
                     setVenues={setVenues}
+                    ownerId={user?.userId}
                     onBack={() => setActiveSubScreen(null)}
                 />
             ) : (
@@ -1349,6 +1774,7 @@ const styles = StyleSheet.create({
 
     rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border, marginBottom: 30 },
     saveButton: { backgroundColor: C.brown, borderRadius: 14, paddingVertical: 16, alignItems: 'center', elevation: 4 },
+    saveButtonDisabled: { opacity: 0.7 },
     saveButtonText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
 
     // Gallery
@@ -1440,6 +1866,21 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginHorizontal: 12,
         letterSpacing: 1,
+    },
+    errorBox: {
+        marginTop: 8,
+        marginBottom: 10,
+        backgroundColor: '#FFF0EB',
+        borderLeftWidth: 4,
+        borderLeftColor: C.orange,
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+    },
+    errorText: {
+        color: C.orange,
+        fontSize: 13,
+        fontWeight: '600',
     },
 });
 

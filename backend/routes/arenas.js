@@ -83,6 +83,45 @@ router.post('/arena/:id/images', upload.fields([
   });
 });
 
+// Delete specific arena images (by image_path)
+router.delete('/arena/:id/images', (req, res) => {
+  const arenaId = req.params.id;
+  const { paths } = req.body || {};
+
+  if (!arenaId) {
+    return res.status(400).json({ error: 'Arena ID is required' });
+  }
+
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return res.status(400).json({ error: 'No image paths provided for deletion' });
+  }
+
+  const normalizedPaths = paths.map((p) => String(p));
+
+  const deleteQuery = 'DELETE FROM arena_images WHERE arena_id = ? AND image_path IN (?)';
+
+  db.query(deleteQuery, [arenaId, normalizedPaths], (err) => {
+    if (err) {
+      console.error('Error deleting arena images:', err);
+      return res.status(500).json({ error: 'Database error while deleting images' });
+    }
+
+    // Best-effort filesystem cleanup; ignore missing files
+    normalizedPaths.forEach((imagePath) => {
+      const filename = path.basename(imagePath);
+      const fileOnDisk = path.join(arenaImagesRoot, String(arenaId), filename);
+
+      fs.unlink(fileOnDisk, (fsErr) => {
+        if (fsErr && fsErr.code !== 'ENOENT') {
+          console.error('Error removing image file:', fsErr);
+        }
+      });
+    });
+
+    return res.json({ message: 'Images deleted successfully' });
+  });
+});
+
 // =========================================================
 // ARENAS & COURTS
 // =========================================================
@@ -118,7 +157,7 @@ router.get('/arena/get/:id', (req, res) => {
   const arenaQuery = `
     SELECT 
       id, owner_id, name, city, address, pricePerHour, availability, rating,
-      timing, amenities, description, rules
+      timing, sports, amenities, description, rules
     FROM arenas 
     WHERE id = ?;
   `;
@@ -126,7 +165,7 @@ router.get('/arena/get/:id', (req, res) => {
   const imagesQuery = `
     SELECT image_path 
     FROM arena_images
-    WHERE arena_id = ?;
+    WHERE arena_id = ?
     ORDER BY id ASC
   `;
 
@@ -161,6 +200,7 @@ router.get('/arena/get/:id', (req, res) => {
       }
     };
 
+    arena.sports = safeJSON(arena.sports);
     arena.amenities = safeJSON(arena.amenities);
     arena.rules = safeJSON(arena.rules);
 
@@ -201,7 +241,7 @@ router.get('/arena/get/:id', (req, res) => {
 
 // Owner creates new arena
 router.post('/arena/create', (req, res) => {
-  const { owner_id, name, city, address, pricePerHour, timing, amenities, description, rules } = req.body;
+  const { owner_id, name, city, address, pricePerHour, timing, sports, amenities, description, rules } = req.body;
 
   if (!owner_id || !name || !city || !pricePerHour) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -209,16 +249,17 @@ router.post('/arena/create', (req, res) => {
 
   const query = `
     INSERT INTO arenas 
-    (owner_id, name, city, address, pricePerHour, availability, rating, timing, amenities, description, rules)
-    VALUES (?, ?, ?, ?, ?, 'available', 0, ?, ?, ?, ?)
+		(owner_id, name, city, address, pricePerHour, availability, rating, timing, sports, amenities, description, rules)
+		VALUES (?, ?, ?, ?, ?, 'available', 0, ?, ?, ?, ?, ?)
   `;
 
+  const sportsJson = JSON.stringify(sports || []);
   const amenitiesJson = JSON.stringify(amenities || []);
   const rulesJson = JSON.stringify(rules || []);
 
   db.query(
-    query,
-    [owner_id, name, city, address, pricePerHour, timing, amenitiesJson, description, rulesJson],
+		query,
+		[owner_id, name, city, address, pricePerHour, timing, sportsJson, amenitiesJson, description, rulesJson],
     (err, result) => {
       if (err) {
         console.error('Error creating arena:', err);
@@ -234,13 +275,39 @@ router.get('/arena/owner', (req, res) => {
   const { ownerId } = req.query;
   if (!ownerId) return res.status(400).json({ error: 'Owner ID required' });
 
-  const query = 'SELECT * FROM arenas WHERE owner_id = ? ORDER BY id DESC';
+  const query = `
+    SELECT 
+      a.id,
+      a.owner_id,
+      a.name,
+      a.city,
+      a.address,
+      a.pricePerHour,
+      a.availability,
+      a.rating,
+      a.timing,
+      a.sports,
+      a.amenities,
+      a.description,
+      a.rules,
+      (
+        SELECT ai.image_path
+        FROM arena_images ai
+        WHERE ai.arena_id = a.id
+        ORDER BY ai.id ASC
+        LIMIT 1
+      ) AS image_path
+    FROM arenas a
+    WHERE a.owner_id = ?
+    ORDER BY a.id DESC
+  `;
 
   db.query(query, [ownerId], (err, results) => {
     if (err) return res.status(500).json({ error: 'Database error' });
 
     const arenas = results.map((arena) => ({
       ...arena,
+      sports: typeof arena.sports === 'string' ? JSON.parse(arena.sports) : arena.sports,
       amenities: typeof arena.amenities === 'string' ? JSON.parse(arena.amenities) : arena.amenities,
       rules: typeof arena.rules === 'string' ? JSON.parse(arena.rules) : arena.rules,
     }));
@@ -252,25 +319,82 @@ router.get('/arena/owner', (req, res) => {
 // Owner: update arena
 router.put('/arena/owner/:id', (req, res) => {
   const arenaId = req.params.id;
-  const { name, city, address, pricePerHour, timing, amenities, description, rules, availability } = req.body;
+  const { name, city, address, pricePerHour, timing, sports, amenities, description, rules, availability } = req.body;
 
   const query = `
     UPDATE arenas
-    SET name=?, city=?, address=?, pricePerHour=?, timing=?, amenities=?, description=?, rules=?, availability=?
+    SET name=?, city=?, address=?, pricePerHour=?, timing=?, sports=?, amenities=?, description=?, rules=?, availability=?
     WHERE id=?
   `;
 
+  const sportsJson = JSON.stringify(sports || []);
   const amenitiesJson = JSON.stringify(amenities || []);
   const rulesJson = JSON.stringify(rules || []);
 
   db.query(
     query,
-    [name, city, address, pricePerHour, timing, amenitiesJson, description, rulesJson, availability, arenaId],
+    [name, city, address, pricePerHour, timing, sportsJson, amenitiesJson, description, rulesJson, availability, arenaId],
     (err) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       return res.json({ message: 'Arena updated successfully' });
     },
   );
+});
+
+// Owner: delete arena (and related images/courts)
+router.delete('/arena/:id', (req, res) => {
+  const arenaId = req.params.id;
+
+  if (!arenaId) {
+    return res.status(400).json({ error: 'Arena ID is required' });
+  }
+
+  const deleteImagesQuery = 'DELETE FROM arena_images WHERE arena_id = ?';
+  const deleteCourtsQuery = 'DELETE FROM courts WHERE arena_id = ?';
+  const deleteArenaQuery = 'DELETE FROM arenas WHERE id = ?';
+
+  // Best-effort filesystem cleanup for arena images
+  const arenaDir = path.join(arenaImagesRoot, String(arenaId));
+  fs.readdir(arenaDir, (readErr, files) => {
+    if (!readErr && Array.isArray(files)) {
+      files.forEach((file) => {
+        const fileOnDisk = path.join(arenaDir, file);
+        fs.unlink(fileOnDisk, (fsErr) => {
+          if (fsErr && fsErr.code !== 'ENOENT') {
+            console.error('Error removing arena image file during delete:', fsErr);
+          }
+        });
+      });
+    }
+  });
+
+  // Delete DB records in order to satisfy foreign keys
+  db.query(deleteImagesQuery, [arenaId], (imgErr) => {
+    if (imgErr) {
+      console.error('Error deleting arena images:', imgErr);
+      return res.status(500).json({ error: 'Database error while deleting arena images' });
+    }
+
+    db.query(deleteCourtsQuery, [arenaId], (courtErr) => {
+      if (courtErr) {
+        console.error('Error deleting arena courts:', courtErr);
+        return res.status(500).json({ error: 'Database error while deleting arena courts' });
+      }
+
+      db.query(deleteArenaQuery, [arenaId], (arenaErr, result) => {
+        if (arenaErr) {
+          console.error('Error deleting arena:', arenaErr);
+          return res.status(500).json({ error: 'Database error while deleting arena' });
+        }
+
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ error: 'Arena not found' });
+        }
+
+        return res.json({ message: 'Arena deleted successfully' });
+      });
+    });
+  });
 });
 
 // Owner: add court to an arena

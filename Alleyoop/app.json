@@ -2,6 +2,7 @@
   "expo": {
     "name": "alleyoop",
     "slug": "alleyoop",
+    "owner": "aka-ayaan",
     "scheme": "alleyoop",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,13 +22,19 @@
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.akaayaan.alleyoop"
     },
     "web": {
       "favicon": "./assets/logo.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "943b5bba-3161-4bd7-a58c-a3da78b4a601"
+      }
+    }
   }
 }

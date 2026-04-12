@@ -27,7 +27,6 @@ function updateEnv(ip) {
   if (content.match(/^EXPO_PUBLIC_API_BASE_URL=.*/m)) {
     content = content.replace(/^EXPO_PUBLIC_API_BASE_URL=.*/m, newLine);
   } else {
-  // Trim any trailing whitespace/newlines, then add the line cleanly
     content = content.trimEnd();
     content = (content ? content + '\n' : '') + newLine + '\n';
   }
