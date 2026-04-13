@@ -544,7 +544,7 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
 }
 
 
-function SubScreenContent({ type, id, data, onBack, venues, setVenues, ownerId }) {
+function SubScreenContent({ type, id, data, onBack, venues, setVenues, ownerId, setOwnerBookings }) {
     const insets = useSafeAreaInsets(); // This gets the status bar height
     const [selectedVenue, setSelectedVenue] = useState(null);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -579,6 +579,9 @@ function SubScreenContent({ type, id, data, onBack, venues, setVenues, ownerId }
             }
 
             setVenues(prev => prev.filter(v => v.id !== venueId));
+            if (setOwnerBookings) {
+                setOwnerBookings(prev => (prev || []).filter(b => String(b.arenaId) !== String(venueId)));
+            }
             onBack();
         } catch (err) {
             Alert.alert('Error', err.message || 'Something went wrong while deleting the venue.');
@@ -1191,6 +1194,7 @@ export function OwnerHomeScreen({ user, onLogout }) {
                     venues={venues}
                     setVenues={setVenues}
                     ownerId={user?.userId}
+                    setOwnerBookings={setOwnerBookings}
                     onBack={() => setActiveSubScreen(null)}
                 />
             ) : (

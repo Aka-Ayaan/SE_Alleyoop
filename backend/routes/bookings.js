@@ -46,6 +46,7 @@ router.get('/bookings/owner', (req, res) => {
   const query = `
     SELECT 
       b.id AS bookingId,
+      b.arena_id AS arenaId,
       a.name AS arenaName,
       ct.type_name AS sportName,
       p.name AS playerName,
