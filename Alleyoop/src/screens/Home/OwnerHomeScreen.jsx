@@ -47,6 +47,8 @@ const TABS = [
     { id: 'profile', label: 'Profile', icon: 'account-circle-outline', activeIcon: 'account-circle' },
 ];
 
+const SPORT_OPTIONS = ['Basketball', 'Tennis', 'Futsal', 'Padel', 'Cricket', 'Badminton', 'Football 5-a-side'];
+
 // Note: venues are fully loaded from the backend; no static VENUE_POSTS.
 
 // ─── Form Inputs ─────────────────────────────────────────────────────────────
@@ -65,13 +67,12 @@ const FormInput = memo(({ label, value, onChangeText, placeholder, ...props }) =
     </View>
 ));
 
-const SportDropdown = memo(({ selectedSports, onToggleSport, isReadOnly }) => {
+const SportDropdown = memo(({ selectedSports, onToggleSport, isReadOnly, label = 'Select Sports' }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const allSports = ['Basketball', 'Tennis', 'Futsal', 'Padel', 'Cricket', 'Badminton', '3x3'];
 
     return (
         <View style={styles.inputGroup}>
-            <Text style={styles.label}>Select Sports</Text>
+            <Text style={styles.label}>{label}</Text>
             <TouchableOpacity
                 style={styles.dropdownHeader}
                 onPress={() => setIsOpen(!isOpen)}
@@ -86,7 +87,7 @@ const SportDropdown = memo(({ selectedSports, onToggleSport, isReadOnly }) => {
 
             {isOpen && (
                 <View style={styles.dropdownList}>
-                    {allSports.map(sport => {
+                    {SPORT_OPTIONS.map(sport => {
                         const isSelected = selectedSports.includes(sport);
                         return (
                             <TouchableOpacity
@@ -140,7 +141,16 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
     // Thumbnail and gallery keep both uri and optional backend path
     const [thumbnail, setThumbnail] = useState(initialData?.user?.image || null);
     const [gallery, setGallery] = useState(initialData?.user?.gallery || []);
-    const [selectedSports, setSelectedSports] = useState(initialData?.user?.sports || []);
+    const [courts, setCourts] = useState(
+        initialData?.user?.courts?.length
+            ? initialData.user.courts.map((court, index) => ({
+                name: court.name || `Court ${index + 1}`,
+                pricePerHour: String(court.pricePerHour ?? initialData?.user?.pricePerHour ?? 0),
+                isIndoor: !!court.isIndoor,
+                sports: Array.isArray(court.sports) ? court.sports : [],
+            }))
+            : [{ name: 'Court 1', pricePerHour: '0', isIndoor: false, sports: [] }]
+    );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const errorShake = useRef(new Animated.Value(0)).current;
@@ -150,11 +160,34 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
     const [endTime, setEndTime] = useState(new Date(new Date().setHours(23, 0, 0)));
     const [showPicker, setShowPicker] = useState(null); // 'start' or 'end'
 
-    const onToggleSport = useCallback((sport) => {
-        setSelectedSports(prev =>
-            prev.includes(sport) ? prev.filter(s => s !== sport) : [...prev, sport]
-        );
+    const addCourt = useCallback(() => {
+        setCourts((prev) => [...prev, { name: `Court ${prev.length + 1}`, pricePerHour: '0', isIndoor: false, sports: [] }]);
     }, []);
+
+    const removeCourt = useCallback((index) => {
+        setCourts((prev) => prev.filter((_, i) => i !== index));
+    }, []);
+
+    const updateCourtField = useCallback((index, field, value) => {
+        setCourts((prev) => prev.map((court, i) => (i === index ? { ...court, [field]: value } : court)));
+    }, []);
+
+    const toggleCourtSport = useCallback((index, sport) => {
+        setCourts((prev) => prev.map((court, i) => {
+            if (i !== index) return court;
+            return {
+                ...court,
+                sports: court.sports.includes(sport)
+                    ? court.sports.filter((s) => s !== sport)
+                    : [...court.sports, sport],
+            };
+        }));
+    }, []);
+
+    const getAllSports = useCallback(
+        () => [...new Set(courts.flatMap((court) => court.sports))],
+        [courts],
+    );
 
     const formatTime = (date) => {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -213,13 +246,21 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
         if (mode === 'view') return;
 
         // Basic validation: all visible fields must have a value
-        if (!name.trim() || !location.trim() || selectedSports.length === 0 || !thumbnail || gallery.length === 0) {
-            setError('Please fill in all fields, pick a thumbnail, and add at least one gallery image.');
+        const hasInvalidCourt = courts.some((court) => !court.name.trim() || court.sports.length === 0);
+        if (!name.trim() || !location.trim() || hasInvalidCourt || courts.length === 0 || !thumbnail || gallery.length === 0) {
+            setError('Please fill all fields. Each court needs a name and at least one sport.');
             shakeError();
             return;
         }
 
         setError('');
+
+        const payloadCourts = courts.map((court) => ({
+            name: court.name.trim(),
+            pricePerHour: Number(court.pricePerHour || 0),
+            isIndoor: !!court.isIndoor,
+            sports: court.sports,
+        }));
 
         const timings = `${formatTime(startTime)} - ${formatTime(endTime)}`;
 
@@ -263,7 +304,7 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
                         address: location,
                         pricePerHour: initialData?.user?.pricePerHour || 0,
                         timing: timings,
-                        sports: selectedSports,
+                        courts: payloadCourts,
                         amenities: [],
                         description: '',
                         rules: [],
@@ -333,7 +374,8 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
                         location,
                         image: thumbnail,
                         gallery,
-                        sports: selectedSports,
+                        sports: getAllSports(),
+                        courts,
                         timings,
                         rating: initialData?.user?.rating || '5.0',
                         isAvailable: true,
@@ -370,9 +412,9 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
                     name,
                     city: location,
                     address: location,
-                    pricePerHour: '0', // default for now
+                    pricePerHour: Number(courts[0]?.pricePerHour || 0),
                     timing: timings,
-                    sports: selectedSports,
+                    courts: payloadCourts,
                     amenities: [],
                     description: '',
                     rules: [],
@@ -425,7 +467,8 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
                     location,
                     image: thumbnail,
                     gallery,
-                    sports: selectedSports,
+                    sports: getAllSports(),
+                    courts,
                     timings,
                     rating: '5.0',
                     isAvailable: true,
@@ -504,7 +547,62 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
                     </View>
                 </View>
 
-                <SportDropdown selectedSports={selectedSports} onToggleSport={onToggleSport} isReadOnly={isReadOnly} />
+                <View style={styles.inputGroup}>
+                    <View style={styles.courtsHeaderRow}>
+                        <Text style={styles.label}>Courts</Text>
+                        {!isReadOnly && (
+                            <TouchableOpacity onPress={addCourt}>
+                                <Text style={styles.addCourtText}>+ Add Court</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {courts.map((court, index) => (
+                        <View key={`court-${index}`} style={styles.courtCard}>
+                            <View style={styles.courtCardHeader}>
+                                <Text style={styles.courtCardTitle}>Court {index + 1}</Text>
+                                {!isReadOnly && courts.length > 1 && (
+                                    <TouchableOpacity onPress={() => removeCourt(index)}>
+                                        <Text style={styles.removeCourtText}>Remove</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <FormInput
+                                label="Court Name"
+                                value={court.name}
+                                onChangeText={(value) => updateCourtField(index, 'name', value)}
+                                editable={!isReadOnly}
+                            />
+
+                            <FormInput
+                                label="Court Price Per Hour"
+                                value={court.pricePerHour}
+                                onChangeText={(value) => updateCourtField(index, 'pricePerHour', value)}
+                                editable={!isReadOnly}
+                                keyboardType="numeric"
+                            />
+
+                            <View style={styles.rowBetweenCompact}>
+                                <Text style={styles.label}>Indoor Court</Text>
+                                <Switch
+                                    value={court.isIndoor}
+                                    onValueChange={(value) => updateCourtField(index, 'isIndoor', value)}
+                                    disabled={isReadOnly}
+                                    trackColor={{ false: '#ccc', true: C.orange + '88' }}
+                                    thumbColor={court.isIndoor ? C.orange : '#f4f3f4'}
+                                />
+                            </View>
+
+                            <SportDropdown
+                                label="Sports on this court"
+                                selectedSports={court.sports}
+                                onToggleSport={(sport) => toggleCourtSport(index, sport)}
+                                isReadOnly={isReadOnly}
+                            />
+                        </View>
+                    ))}
+                </View>
 
                 {error ? (
                     <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
@@ -617,6 +715,7 @@ function SubScreenContent({ type, id, data, onBack, venues, setVenues, ownerId, 
                             isLocal: false,
                         })),
                         sports: data.sports || [],
+                        courts: data.courts || [],
                         timings: data.timing || '',
                         rating: data.rating != null ? String(data.rating) : '0.0',
                         isAvailable: data.availability === 'available',
@@ -1047,7 +1146,10 @@ export function OwnerHomeScreen({ user, onLogout }) {
                         rating: item.rating != null ? String(item.rating) : '0.0',
                         isAvailable: item.availability === 'available',
                         sports: item.sports || [],
+                        courts: item.courts || [],
                         timings: item.timing || '',
+                        pricePerHour: item.pricePerHour || 0,
+                        availability: item.availability || 'available',
                     },
                 }));
 
@@ -1145,7 +1247,7 @@ export function OwnerHomeScreen({ user, onLogout }) {
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
 
             {/* ── Top bar ── */}
-            <View style={[styles.topBar, { paddingTop: insets.top }]}>
+            <View style={styles.topBar}>
 
                 {/* LEFT SIDE: Conditional Tab Label or Back Button */}
                 <View style={styles.topBarSide}>
@@ -1158,7 +1260,14 @@ export function OwnerHomeScreen({ user, onLogout }) {
                             <Text style={styles.headerBackText}>Back</Text>
                         </TouchableOpacity>
                     ) : (
-                        <Text style={styles.topBarTitle}>{currentTab.label}</Text>
+                        <Text
+                            style={styles.topBarTitle}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.8}
+                        >
+                            {currentTab.label}
+                        </Text>
                     )}
                 </View>
 
@@ -1175,11 +1284,14 @@ export function OwnerHomeScreen({ user, onLogout }) {
                 <View style={styles.topBarSide}>
                     {/* Hide search if a subscreen is open */}
                     {!activeSubScreen && (
-                        <TouchableOpacity style={styles.topBarAction}>
+                        <TouchableOpacity
+                            style={styles.topBarAction}
+                            onPress={activeTab === 2 ? onLogout : () => { }}
+                        >
                             <MaterialCommunityIcons
-                                name={activeTab === 2 ? "logout" : "magnify"}
+                                name={activeTab < 2 ? "magnify" : "logout"}
                                 size={26}
-                                color={C.brown}
+                                color={activeTab < 2 ? C.brown : C.orange}
                             />
                         </TouchableOpacity>
                     )}
@@ -1292,31 +1404,29 @@ const styles = StyleSheet.create({
         backgroundColor: C.white,
         borderBottomWidth: 1,
         borderBottomColor: C.border,
-        paddingBottom: 10,
-        // Add an explicit height to ensure content has room
-        height: 70,
+        height: 60,
+        paddingBottom: 5,
     },
     topBarSide: {
-        width: 75, // Gives enough room for "Venues" and the Icon
+        width: 92,
+        justifyContent: 'center',
     },
     topBarCenter: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
     },
     topBarTitle: {
-        fontSize: 14, // Slightly larger
+        fontSize: 16,
         fontWeight: '800',
         color: C.brown,
+        flexShrink: 1,
     },
     logoImage: {
-        width: 150, // Adjust this based on your file's actual shape
-        height: 50,
+        width: 120,
+        height: 40,
     },
     topBarAction: {
         alignItems: 'flex-end',
-        justifyContent: 'center',
-        height: '100%', // Makes it easier to tap
     },
     headerBackButton: {
         flexDirection: 'row', // Horizontal layout
@@ -1775,6 +1885,14 @@ const styles = StyleSheet.create({
     timeLabel: { fontSize: 10, color: C.mutedText, textTransform: 'uppercase', marginBottom: 2 },
     timeValue: { fontSize: 16, fontWeight: '700', color: C.brown },
     timeDivider: { width: 1, height: 30, backgroundColor: C.border },
+
+    courtsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+    addCourtText: { color: C.orange, fontWeight: '800' },
+    courtCard: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 12, marginBottom: 12 },
+    courtCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    courtCardTitle: { color: C.brown, fontWeight: '800', fontSize: 15 },
+    removeCourtText: { color: '#C23B22', fontWeight: '700' },
+    rowBetweenCompact: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
 
     rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border, marginBottom: 30 },
     saveButton: { backgroundColor: C.brown, borderRadius: 14, paddingVertical: 16, alignItems: 'center', elevation: 4 },

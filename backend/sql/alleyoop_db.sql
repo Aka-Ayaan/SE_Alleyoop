@@ -13,9 +13,9 @@ CREATE DATABASE IF NOT EXISTS alleyoop;
 USE alleyoop;
 
 
-/* ==========================================================
+/* =========================================================
 	 Lookup Tables
-	 ========================================================== */
+	========================================================= */
 
 -- Types of courts / sports
 CREATE TABLE IF NOT EXISTS court_types (
@@ -173,6 +173,30 @@ CREATE TABLE IF NOT EXISTS arenas (
 );
 
 
+-- Real-world model: one arena has many courts
+CREATE TABLE IF NOT EXISTS courts (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	arena_id INT NOT NULL,
+	name VARCHAR(100) NOT NULL,
+	price_per_hour INT DEFAULT NULL,
+	is_indoor TINYINT(1) DEFAULT 0,
+	status ENUM('available', 'unavailable', 'maintenance') DEFAULT 'available',
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (arena_id) REFERENCES arenas(id)
+);
+
+
+-- A court can support one or more sports
+CREATE TABLE IF NOT EXISTS court_sports (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	court_id INT NOT NULL,
+	court_type_id INT NOT NULL,
+	UNIQUE KEY uniq_court_sport (court_id, court_type_id),
+	FOREIGN KEY (court_id) REFERENCES courts(id),
+	FOREIGN KEY (court_type_id) REFERENCES court_types(id)
+);
+
+
 CREATE TABLE IF NOT EXISTS arena_images (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	arena_id INT NOT NULL,
@@ -189,6 +213,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	player_id INT NOT NULL,
 	arena_id INT NOT NULL,
+	court_id INT NOT NULL,
 	court_type_id INT NOT NULL,
 	booking_date DATE NOT NULL,
 	start_time TIME NOT NULL,
@@ -198,6 +223,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (player_id) REFERENCES players(id),
 	FOREIGN KEY (arena_id) REFERENCES arenas(id),
+	FOREIGN KEY (court_id) REFERENCES courts(id),
 	FOREIGN KEY (court_type_id) REFERENCES court_types(id),
 	FOREIGN KEY (status_id) REFERENCES booking_status(id)
 );
@@ -276,7 +302,8 @@ CREATE TABLE IF NOT EXISTS trainer_time_slots (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	trainer_id INT NOT NULL,
 	arena_id INT NOT NULL,
-	court_type_id INT NOT NULL,
+	court_id INT NOT NULL,
+	court_type_id INT DEFAULT NULL,
 	session_date DATE NOT NULL,
 	start_time TIME NOT NULL,
 	end_time TIME NOT NULL,
@@ -287,6 +314,7 @@ CREATE TABLE IF NOT EXISTS trainer_time_slots (
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (trainer_id) REFERENCES trainers(id),
 	FOREIGN KEY (arena_id) REFERENCES arenas(id),
+	FOREIGN KEY (court_id) REFERENCES courts(id),
 	FOREIGN KEY (court_type_id) REFERENCES court_types(id)
 );
 
@@ -449,6 +477,19 @@ VALUES (
 	'A multi‑sport facility for Alleyoop testing.',
 	JSON_ARRAY('Proper sports shoes required', 'Arrive 10 minutes early')
 );
+
+INSERT INTO courts (arena_id, name, price_per_hour, is_indoor, status) VALUES
+(1, 'Court 1', 4000, 1, 'available'),
+(1, 'Court 2', 3800, 1, 'available'),
+(1, 'Court 3', 4200, 0, 'available'),
+(1, 'Court 4', 4000, 0, 'available');
+
+INSERT INTO court_sports (court_id, court_type_id) VALUES
+(1, 6), -- Basketball
+(2, 4), -- Futsal
+(3, 1), -- Padel
+(4, 6), -- Basketball
+(4, 4); -- Futsal
  
 -- Additional dummy arenas for testing
 INSERT INTO arenas (
@@ -518,6 +559,24 @@ VALUES
 	JSON_ARRAY('Full advance payment required', 'Respect staff and other players')
 );
 
+INSERT INTO courts (arena_id, name, price_per_hour, is_indoor, status) VALUES
+(2, 'Futsal Court A', 3500, 1, 'available'),
+(2, 'Futsal Court B', 3500, 1, 'available'),
+(2, 'Futsal Court C', 3200, 0, 'available'),
+(3, 'Tennis Court 1', 3000, 0, 'available'),
+(3, 'Tennis Court 2', 3200, 0, 'available'),
+(4, 'Main Court', 2500, 1, 'available'),
+(4, 'Basket Court', 2600, 1, 'available'),
+(5, 'Court A', 4200, 1, 'available'),
+(5, 'Court B', 4200, 1, 'available');
+
+INSERT INTO court_sports (court_id, court_type_id) VALUES
+(5, 4), (6, 4), (7, 4), -- arena 2
+(8, 2), (9, 2),         -- arena 3
+(10, 4), (10, 7), (11, 6),       -- arena 4
+(12, 6), (12, 3), (12, 4),
+(13, 6), (13, 3);       -- arena 5
+
 
 -- Example matchmaking request
 INSERT INTO matchmaking_requests (
@@ -539,13 +598,14 @@ VALUES (
 
 -- Dummy court bookings for testing
 INSERT INTO bookings (
-	player_id, arena_id, court_type_id, booking_date, start_time, end_time,
+	player_id, arena_id, court_id, court_type_id, booking_date, start_time, end_time,
 	status_id, participants_count
 )
 VALUES
 (
 	1,
 	1,
+	2,
 	4, -- Futsal
 	'2025-12-05',
 	'18:00:00',
@@ -554,6 +614,7 @@ VALUES
 	10
 ),
 (
+	1,
 	1,
 	1,
 	6, -- Basketball
@@ -566,6 +627,7 @@ VALUES
 (
 	1,
 	2,
+	5,
 	4, -- Futsal
 	'2025-12-07',
 	'17:00:00',
@@ -576,6 +638,7 @@ VALUES
 (
 	1,
 	3,
+	8,
 	1, -- Padel
 	'2025-12-08',
 	'19:00:00',
@@ -586,6 +649,7 @@ VALUES
 (
 	1,
 	4,
+	10,
 	7, -- Football 5-a-side
 	'2025-12-09',
 	'07:00:00',

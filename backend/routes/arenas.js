@@ -5,351 +5,486 @@ const multer = require('multer');
 const db = require('../config/db');
 
 const router = express.Router();
+const dbp = db.promise();
 
 const arenaImagesRoot = path.join(__dirname, '..', 'uploads', 'arenas');
 
-router.get('/arena/get/:id', (req, res) => {
-  const arenaId = req.params.id;
+const safeJSON = (value) => {
+  if (!value) return [];
+  try {
+    if (Array.isArray(value)) return value;
+    if (Buffer.isBuffer(value)) return JSON.parse(value.toString());
+    if (typeof value === 'string') return JSON.parse(value);
+    return [];
+  } catch {
+    return [];
+  }
+};
 
-  const arenaQuery = `
-    SELECT 
-      id, owner_id, name, city, address, pricePerHour, availability, rating,
-      timing, total_courts, sports, amenities, description, rules
-    FROM arenas 
-    WHERE id = ?;
-  `;
-
-  const imagesQuery = `
-    SELECT image_path 
-    FROM arena_images 
-    WHERE arena_id = ?
-    ORDER BY id ASC;
-  `;
-
-  db.query(arenaQuery, [arenaId], (err, arenaResult) => {
-    if (err) return res.status(500).json({ error: 'Database error (arena)' });
-    if (!arenaResult || arenaResult.length === 0) {
-      return res.status(404).json({ error: 'Arena not found' });
-    }
-
-    const arena = arenaResult[0];
-
-    const safeJSON = (value) => {
-      if (!value) return [];
-      try {
-        if (Array.isArray(value)) return value;
-        if (Buffer.isBuffer(value)) return JSON.parse(value.toString());
-        if (typeof value === 'string') return JSON.parse(value);
-        return [];
-      } catch (e) {
-        console.error('JSON parse error:', e);
-        return [];
-      }
-    };
-
-    arena.sports = safeJSON(arena.sports);
-    arena.amenities = safeJSON(arena.amenities);
-    arena.rules = safeJSON(arena.rules);
-
-    db.query(imagesQuery, [arenaId], (imgErr, imgResult) => {
-      if (imgErr) return res.status(500).json({ error: 'Database error (images)' });
-      const images = imgResult.map((row) => row.image_path);
-
-      return res.json({
-        id: arena.id,
-        name: arena.name,
-        address: arena.address,
-        city: arena.city,
-        rating: arena.rating,
-        pricePerHour: arena.pricePerHour,
-        availability: arena.availability,
-        timing: arena.timing,
-        total_courts: arena.total_courts,
-        sports: arena.sports,
-        amenities: arena.amenities,
-        description: arena.description,
-        rules: arena.rules,
-        images,
-      });
-    });
-  });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const arenaId = String(req.params.id);
+      const targetDir = path.join(arenaImagesRoot, arenaId);
+      fs.mkdirSync(targetDir, { recursive: true });
+      cb(null, targetDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '.jpg');
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
 });
 
-// Owner creates new arena
-router.post('/arena/create', (req, res) => {
-  const { owner_id, name, city, address, pricePerHour, timing, sports, amenities, description, rules, total_courts } = req.body;
+function normalizeCourtInput(courts = []) {
+  if (!Array.isArray(courts)) return [];
 
-  if (!owner_id || !name || !city || !pricePerHour) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  return courts
+    .map((court, index) => {
+      const name = String(court.name || `Court ${index + 1}`).trim();
+      const pricePerHour = Number.isFinite(Number(court.pricePerHour)) ? Number(court.pricePerHour) : null;
+      const isIndoor = court.isIndoor ? 1 : 0;
+      const sports = Array.isArray(court.sports)
+        ? court.sports.map((s) => String(s).trim()).filter(Boolean)
+        : [];
+
+      return {
+        name,
+        pricePerHour,
+        isIndoor,
+        sports,
+      };
+    })
+    .filter((court) => court.name.length > 0);
+}
+
+async function getCourtTypeMap() {
+  const [rows] = await dbp.query('SELECT id, type_name FROM court_types');
+  const map = new Map();
+  rows.forEach((row) => map.set(String(row.type_name).toLowerCase(), row.id));
+  return map;
+}
+
+async function replaceArenaCourts(arenaId, courts) {
+  const courtTypeMap = await getCourtTypeMap();
+
+  for (const court of courts) {
+    if (!court.sports || court.sports.length === 0) {
+      throw new Error(`Court "${court.name}" must have at least one sport`);
+    }
+
+    const missing = court.sports.filter((sport) => !courtTypeMap.has(String(sport).toLowerCase()));
+    if (missing.length > 0) {
+      throw new Error(`Invalid sport(s): ${missing.join(', ')}`);
+    }
   }
 
-  const query = `
-    INSERT INTO arenas 
-      (owner_id, name, city, address, pricePerHour, availability, rating, timing, total_courts, sports, amenities, description, rules)
-    VALUES (?, ?, ?, ?, ?, 'available', 0, ?, ?, ?, ?, ?, ?)
-  `;
+  await dbp.query('DELETE cs FROM court_sports cs JOIN courts c ON cs.court_id = c.id WHERE c.arena_id = ?', [arenaId]);
+  await dbp.query('DELETE FROM courts WHERE arena_id = ?', [arenaId]);
 
-  const sportsJson = JSON.stringify(sports || []);
-  const amenitiesJson = JSON.stringify(amenities || []);
-  const rulesJson = JSON.stringify(rules || []);
-  const totalCourtsValue = Number.isInteger(total_courts) ? total_courts : 1;
+  for (const court of courts) {
+    const [insertCourtResult] = await dbp.query(
+      'INSERT INTO courts (arena_id, name, price_per_hour, is_indoor) VALUES (?, ?, ?, ?)',
+      [arenaId, court.name, court.pricePerHour, court.isIndoor],
+    );
 
-  db.query(
-    query,
-    [owner_id, name, city, address, pricePerHour, timing, totalCourtsValue, sportsJson, amenitiesJson, description, rulesJson],
-    (err, result) => {
-      if (err) {
-        console.error('Error creating arena:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      return res.status(201).json({ message: 'Arena created successfully', id: result.insertId });
-    },
+    const courtId = insertCourtResult.insertId;
+    const uniqueSports = [...new Set(court.sports.map((s) => String(s).toLowerCase()))];
+
+    for (const sport of uniqueSports) {
+      await dbp.query(
+        'INSERT INTO court_sports (court_id, court_type_id) VALUES (?, ?)',
+        [courtId, courtTypeMap.get(sport)],
+      );
+    }
+  }
+}
+
+async function getArenaCourts(arenaId) {
+  const [rows] = await dbp.query(
+    `
+      SELECT
+        c.id,
+        c.name,
+        c.price_per_hour,
+        c.is_indoor,
+        c.status,
+        ct.type_name
+      FROM courts c
+      LEFT JOIN court_sports cs ON cs.court_id = c.id
+      LEFT JOIN court_types ct ON ct.id = cs.court_type_id
+      WHERE c.arena_id = ?
+      ORDER BY c.id ASC
+    `,
+    [arenaId],
   );
-});
 
-// =========================================================
-// ARENAS & COURTS
-// =========================================================
-router.get('/arena/get', (req, res) => {
-  const query = `
-    SELECT 
-      a.id,
-      a.name,
-      a.city AS location,
-      a.pricePerHour,
-      a.availability,
-      a.rating,
-      (
-        SELECT ai.image_path
-        FROM arena_images ai
-        WHERE ai.arena_id = a.id
-        ORDER BY ai.id ASC
-        LIMIT 1
-      ) AS image_path
-    FROM arenas a
-    ORDER BY a.id DESC
-  `;
+  const courtsMap = new Map();
+  rows.forEach((row) => {
+    if (!courtsMap.has(row.id)) {
+      courtsMap.set(row.id, {
+        id: row.id,
+        name: row.name,
+        pricePerHour: row.price_per_hour,
+        isIndoor: row.is_indoor === 1,
+        status: row.status,
+        sports: [],
+      });
+    }
 
-  db.query(query, (err, results) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    return res.json(results);
+    if (row.type_name) {
+      courtsMap.get(row.id).sports.push(row.type_name);
+    }
   });
+
+  return Array.from(courtsMap.values());
+}
+
+// Sports list for frontend dropdowns
+router.get('/court-types', async (req, res) => {
+  try {
+    const [rows] = await dbp.query('SELECT id, type_name FROM court_types ORDER BY type_name ASC');
+    return res.json(rows);
+  } catch (err) {
+    console.error('Error fetching court types:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
 });
 
-router.get('/arena/get/:id', (req, res) => {
+// Owner creates new arena with courts
+router.post('/arena/create', async (req, res) => {
+  const { owner_id, name, city, address, pricePerHour, timing, amenities, description, rules, courts } = req.body;
+
+  const normalizedCourts = normalizeCourtInput(courts);
+
+  if (!owner_id || !name || !city || pricePerHour === undefined || normalizedCourts.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields or courts' });
+  }
+
+  try {
+    await dbp.beginTransaction();
+
+    const amenitiesJson = JSON.stringify(amenities || []);
+    const rulesJson = JSON.stringify(rules || []);
+
+    const allSports = [...new Set(normalizedCourts.flatMap((court) => court.sports))];
+    const sportsJson = JSON.stringify(allSports);
+
+    const [arenaResult] = await dbp.query(
+      `
+      INSERT INTO arenas
+        (owner_id, name, city, address, pricePerHour, availability, rating, timing, total_courts, sports, amenities, description, rules)
+      VALUES (?, ?, ?, ?, ?, 'available', 0, ?, ?, ?, ?, ?, ?)
+      `,
+      [owner_id, name, city, address || null, Number(pricePerHour), timing || null, normalizedCourts.length, sportsJson, amenitiesJson, description || null, rulesJson],
+    );
+
+    const arenaId = arenaResult.insertId;
+    await replaceArenaCourts(arenaId, normalizedCourts);
+
+    await dbp.commit();
+    return res.status(201).json({ message: 'Arena created successfully', id: arenaId });
+  } catch (err) {
+    await dbp.rollback();
+    console.error('Error creating arena:', err);
+    return res.status(500).json({ error: err.message || 'Database error' });
+  }
+});
+
+// Arena list
+router.get('/arena/get', async (req, res) => {
+  try {
+    const [results] = await dbp.query(
+      `
+      SELECT
+        a.id,
+        a.name,
+        a.city AS location,
+        a.pricePerHour,
+        a.availability,
+        a.rating,
+        (
+          SELECT ai.image_path
+          FROM arena_images ai
+          WHERE ai.arena_id = a.id
+          ORDER BY ai.id ASC
+          LIMIT 1
+        ) AS image_path,
+        (
+          SELECT COUNT(*)
+          FROM courts c
+          WHERE c.arena_id = a.id
+        ) AS total_courts
+      FROM arenas a
+      ORDER BY a.id DESC
+      `,
+    );
+
+    return res.json(results);
+  } catch (err) {
+    console.error('Error fetching arenas:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Arena details
+router.get('/arena/get/:id', async (req, res) => {
   const arenaId = req.params.id;
 
-  const arenaQuery = `
-    SELECT 
-      id, owner_id, name, city, address, pricePerHour, availability, rating,
-      timing, total_courts, sports, amenities, description, rules
-    FROM arenas 
-    WHERE id = ?;
-  `;
+  try {
+    const [arenaResult] = await dbp.query(
+      `
+      SELECT
+        id, owner_id, name, city, address, pricePerHour, availability, rating,
+        timing, total_courts, sports, amenities, description, rules
+      FROM arenas
+      WHERE id = ?
+      `,
+      [arenaId],
+    );
 
-  const imagesQuery = `
-    SELECT image_path 
-    FROM arena_images 
-    WHERE arena_id = ?
-    ORDER BY id ASC;
-  `;
-
-  db.query(arenaQuery, [arenaId], (err, arenaResult) => {
-    if (err) return res.status(500).json({ error: 'Database error (arena)' });
     if (!arenaResult || arenaResult.length === 0) {
       return res.status(404).json({ error: 'Arena not found' });
     }
 
     const arena = arenaResult[0];
 
-    const safeJSON = (value) => {
-      if (!value) return [];
-      try {
-        if (Array.isArray(value)) return value;
-        if (Buffer.isBuffer(value)) return JSON.parse(value.toString());
-        if (typeof value === 'string') return JSON.parse(value);
-        return [];
-      } catch (e) {
-        console.error('JSON parse error:', e);
-        return [];
-      }
-    };
+    const [imageRows] = await dbp.query(
+      `
+      SELECT image_path
+      FROM arena_images
+      WHERE arena_id = ?
+      ORDER BY id ASC
+      `,
+      [arenaId],
+    );
 
-    arena.sports = safeJSON(arena.sports);
-    arena.amenities = safeJSON(arena.amenities);
-    arena.rules = safeJSON(arena.rules);
+    const courts = await getArenaCourts(arenaId);
+    const allSports = [...new Set(courts.flatMap((court) => court.sports))];
 
-    db.query(imagesQuery, [arenaId], (imgErr, imgResult) => {
-      if (imgErr) return res.status(500).json({ error: 'Database error (images)' });
-      const images = imgResult.map((row) => row.image_path);
-
-      return res.json({
-        id: arena.id,
-        name: arena.name,
-        address: arena.address,
-        city: arena.city,
-        rating: arena.rating,
-        pricePerHour: arena.pricePerHour,
-        availability: arena.availability,
-        timing: arena.timing,
-        total_courts: arena.total_courts,
-        sports: arena.sports,
-        amenities: arena.amenities,
-        description: arena.description,
-        rules: arena.rules,
-        images,
-      });
+    return res.json({
+      id: arena.id,
+      name: arena.name,
+      address: arena.address,
+      city: arena.city,
+      rating: arena.rating,
+      pricePerHour: arena.pricePerHour,
+      availability: arena.availability,
+      timing: arena.timing,
+      total_courts: courts.length,
+      sports: allSports.length > 0 ? allSports : safeJSON(arena.sports),
+      amenities: safeJSON(arena.amenities),
+      description: arena.description,
+      rules: safeJSON(arena.rules),
+      images: imageRows.map((row) => row.image_path),
+      courts,
     });
-  });
+  } catch (err) {
+    console.error('Error fetching arena details:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Owner: get own arenas
-router.get('/arena/owner', (req, res) => {
+router.get('/arena/owner', async (req, res) => {
   const { ownerId } = req.query;
   if (!ownerId) return res.status(400).json({ error: 'Owner ID required' });
 
-  const query = `
-    SELECT 
-      a.id,
-      a.owner_id,
-      a.name,
-      a.city,
-      a.address,
-      a.pricePerHour,
-      a.availability,
-      a.rating,
-      a.timing,
-      a.sports,
-      a.amenities,
-      a.description,
-      a.rules,
-      (
-        SELECT ai.image_path
-        FROM arena_images ai
-        WHERE ai.arena_id = a.id
-        ORDER BY ai.id ASC
-        LIMIT 1
-      ) AS image_path
-    FROM arenas a
-    WHERE a.owner_id = ?
-    ORDER BY a.id DESC
-  `;
+  try {
+    const [rows] = await dbp.query(
+      `
+      SELECT
+        a.id,
+        a.owner_id,
+        a.name,
+        a.city,
+        a.address,
+        a.pricePerHour,
+        a.availability,
+        a.rating,
+        a.timing,
+        a.sports,
+        a.amenities,
+        a.description,
+        a.rules,
+        (
+          SELECT ai.image_path
+          FROM arena_images ai
+          WHERE ai.arena_id = a.id
+          ORDER BY ai.id ASC
+          LIMIT 1
+        ) AS image_path
+      FROM arenas a
+      WHERE a.owner_id = ?
+      ORDER BY a.id DESC
+      `,
+      [ownerId],
+    );
 
-  db.query(query, [ownerId], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
+    const arenas = [];
+    for (const row of rows) {
+      const courts = await getArenaCourts(row.id);
+      const allSports = [...new Set(courts.flatMap((court) => court.sports))];
 
-    const arenas = results.map((arena) => ({
-      ...arena,
-      sports: typeof arena.sports === 'string' ? JSON.parse(arena.sports) : arena.sports,
-      amenities: typeof arena.amenities === 'string' ? JSON.parse(arena.amenities) : arena.amenities,
-      rules: typeof arena.rules === 'string' ? JSON.parse(arena.rules) : arena.rules,
-    }));
+      arenas.push({
+        ...row,
+        sports: allSports.length > 0 ? allSports : safeJSON(row.sports),
+        amenities: safeJSON(row.amenities),
+        rules: safeJSON(row.rules),
+        total_courts: courts.length,
+        courts,
+      });
+    }
 
     return res.json(arenas);
-  });
+  } catch (err) {
+    console.error('Error fetching owner arenas:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
 });
 
-// Owner: update arena
-router.put('/arena/owner/:id', (req, res) => {
+// Owner: update arena and replace courts
+router.put('/arena/owner/:id', async (req, res) => {
   const arenaId = req.params.id;
-  const { name, city, address, pricePerHour, timing, sports, amenities, description, rules, availability } = req.body;
+  const { name, city, address, pricePerHour, timing, amenities, description, rules, availability, courts } = req.body;
 
-  const query = `
-    UPDATE arenas
-    SET name=?, city=?, address=?, pricePerHour=?, timing=?, sports=?, amenities=?, description=?, rules=?, availability=?
-    WHERE id=?
-  `;
+  const normalizedCourts = normalizeCourtInput(courts);
+  if (normalizedCourts.length === 0) {
+    return res.status(400).json({ error: 'At least one court is required' });
+  }
 
-  const sportsJson = JSON.stringify(sports || []);
-  const amenitiesJson = JSON.stringify(amenities || []);
-  const rulesJson = JSON.stringify(rules || []);
+  try {
+    await dbp.beginTransaction();
 
-  db.query(
-    query,
-    [name, city, address, pricePerHour, timing, sportsJson, amenitiesJson, description, rulesJson, availability, arenaId],
-    (err) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      return res.json({ message: 'Arena updated successfully' });
-    },
-  );
+    const allSports = [...new Set(normalizedCourts.flatMap((court) => court.sports))];
+
+    await dbp.query(
+      `
+      UPDATE arenas
+      SET name = ?, city = ?, address = ?, pricePerHour = ?, timing = ?,
+          sports = ?, amenities = ?, description = ?, rules = ?, availability = ?, total_courts = ?
+      WHERE id = ?
+      `,
+      [
+        name,
+        city,
+        address,
+        pricePerHour,
+        timing,
+        JSON.stringify(allSports),
+        JSON.stringify(amenities || []),
+        description || null,
+        JSON.stringify(rules || []),
+        availability || 'available',
+        normalizedCourts.length,
+        arenaId,
+      ],
+    );
+
+    await replaceArenaCourts(arenaId, normalizedCourts);
+
+    await dbp.commit();
+    return res.json({ message: 'Arena updated successfully' });
+  } catch (err) {
+    await dbp.rollback();
+    console.error('Error updating arena:', err);
+    return res.status(500).json({ error: err.message || 'Database error' });
+  }
 });
 
-// Owner: delete arena (and related images)
-router.delete('/arena/:id', (req, res) => {
+// Upload arena images
+router.post('/arena/:id/images', upload.fields([{ name: 'thumbnail', maxCount: 1 }, { name: 'gallery', maxCount: 10 }]), async (req, res) => {
+  const arenaId = req.params.id;
+
+  try {
+    const [arenaRows] = await dbp.query('SELECT id FROM arenas WHERE id = ?', [arenaId]);
+    if (!arenaRows.length) {
+      return res.status(404).json({ error: 'Arena not found' });
+    }
+
+    const files = req.files || {};
+    const thumbnail = files.thumbnail || [];
+    const gallery = files.gallery || [];
+
+    const allFiles = [...thumbnail, ...gallery];
+    if (allFiles.length === 0) {
+      return res.status(400).json({ error: 'No images uploaded' });
+    }
+
+    for (const file of allFiles) {
+      const relativePath = `/uploads/arenas/${arenaId}/${path.basename(file.path)}`;
+      await dbp.query('INSERT INTO arena_images (arena_id, image_path) VALUES (?, ?)', [arenaId, relativePath]);
+    }
+
+    return res.status(201).json({ message: 'Images uploaded successfully' });
+  } catch (err) {
+    console.error('Error uploading images:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Delete selected arena images by path
+router.delete('/arena/:id/images', async (req, res) => {
+  const arenaId = req.params.id;
+  const { paths } = req.body || {};
+
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return res.status(400).json({ error: 'Image paths are required' });
+  }
+
+  try {
+    for (const imagePath of paths) {
+      await dbp.query('DELETE FROM arena_images WHERE arena_id = ? AND image_path = ?', [arenaId, imagePath]);
+
+      const fileOnDisk = path.join(__dirname, '..', imagePath.replace(/^\//, ''));
+      fs.unlink(fileOnDisk, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error('Error deleting image from disk:', err);
+        }
+      });
+    }
+
+    return res.json({ message: 'Images deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting images:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Owner: delete arena
+router.delete('/arena/:id', async (req, res) => {
   const arenaId = req.params.id;
 
   if (!arenaId) {
     return res.status(400).json({ error: 'Arena ID is required' });
   }
 
-  const deleteImagesQuery = 'DELETE FROM arena_images WHERE arena_id = ?';
-  const deleteBookingsQuery = 'DELETE FROM bookings WHERE arena_id = ?';
-  const deleteArenaQuery = 'DELETE FROM arenas WHERE id = ?';
+  try {
+    await dbp.beginTransaction();
 
-  // Best-effort filesystem cleanup for arena images
-  const arenaDir = path.join(arenaImagesRoot, String(arenaId));
-  fs.readdir(arenaDir, (readErr, files) => {
-    if (!readErr && Array.isArray(files)) {
-      files.forEach((file) => {
-        const fileOnDisk = path.join(arenaDir, file);
-        fs.unlink(fileOnDisk, (fsErr) => {
-          if (fsErr && fsErr.code !== 'ENOENT') {
-            console.error('Error removing arena image file during delete:', fsErr);
-          }
-        });
-      });
-    }
-  });
+    await dbp.query('DELETE FROM bookings WHERE arena_id = ?', [arenaId]);
+    await dbp.query('DELETE cs FROM court_sports cs JOIN courts c ON cs.court_id = c.id WHERE c.arena_id = ?', [arenaId]);
+    await dbp.query('DELETE FROM courts WHERE arena_id = ?', [arenaId]);
+    await dbp.query('DELETE FROM arena_images WHERE arena_id = ?', [arenaId]);
 
-  // Delete DB records in order to satisfy foreign keys
-  db.query(deleteImagesQuery, [arenaId], (imgErr) => {
-    if (imgErr) {
-      console.error('Error deleting arena images:', imgErr);
-      return res.status(500).json({ error: 'Database error while deleting arena images' });
+    const [result] = await dbp.query('DELETE FROM arenas WHERE id = ?', [arenaId]);
+
+    if (result.affectedRows === 0) {
+      await dbp.rollback();
+      return res.status(404).json({ error: 'Arena not found' });
     }
 
-    db.query(deleteBookingsQuery, [arenaId], (bookErr) => {
-      if (bookErr) {
-        console.error('Error deleting arena bookings:', bookErr);
-        return res.status(500).json({ error: 'Database error while deleting arena bookings' });
-      }
+    await dbp.commit();
 
-      db.query(deleteArenaQuery, [arenaId], (arenaErr, result) => {
-        if (arenaErr) {
-          console.error('Error deleting arena:', arenaErr);
-          return res.status(500).json({ error: 'Database error while deleting arena' });
-        }
+    const arenaDir = path.join(arenaImagesRoot, String(arenaId));
+    fs.rm(arenaDir, { recursive: true, force: true }, () => {});
 
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ error: 'Arena not found' });
-        }
-
-        return res.json({ message: 'Arena deleted successfully' });
-      });
-    });
-  });
-});
-
-// Owner: add court to an arena
-router.post('/arena/courts', (req, res) => {
-  const { arena_id, court_type_id, name, image_path, pricePerHour, is_indoor } = req.body;
-
-  if (!arena_id || !court_type_id || !name) {
-    return res.status(400).json({ error: 'Missing required fields' });
+    return res.json({ message: 'Arena deleted successfully' });
+  } catch (err) {
+    await dbp.rollback();
+    console.error('Error deleting arena:', err);
+    return res.status(500).json({ error: 'Database error while deleting arena' });
   }
-
-  const query = `
-    INSERT INTO courts (arena_id, court_type_id, name, image_path, pricePerHour, is_indoor)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
-
-  db.query(query, [arena_id, court_type_id, name, image_path || null, pricePerHour || null, is_indoor ? 1 : 0], (err, result) => {
-    if (err) {
-      console.error('Error creating court:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    return res.status(201).json({ message: 'Court created successfully', id: result.insertId });
-  });
 });
 
 module.exports = router;
