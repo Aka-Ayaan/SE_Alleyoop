@@ -220,6 +220,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 	end_time TIME NOT NULL,
 	status_id INT NOT NULL,
 	participants_count INT DEFAULT 1,
+	is_private BOOLEAN NOT NULL,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (player_id) REFERENCES players(id),
 	FOREIGN KEY (arena_id) REFERENCES arenas(id),
@@ -376,61 +377,69 @@ CREATE TABLE IF NOT EXISTS arena_reviews (
 	FOREIGN KEY (player_id) REFERENCES players(id)
 );
 
+CREATE TABLE IF NOT EXISTS booking_participants (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  booking_id INT NOT NULL,
+  player_id INT NOT NULL,
+  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (booking_id) REFERENCES bookings(id),
+  FOREIGN KEY (player_id) REFERENCES players(id)
+);
+
 
 /* ==========================================================
 	 Matchmaking System
 ========================================================== */
 
 -- Player‑initiated matchmaking requests
-CREATE TABLE IF NOT EXISTS matchmaking_requests (
-	id INT AUTO_INCREMENT PRIMARY KEY,
-	player_id INT NOT NULL,
-	court_type_id INT NOT NULL,   -- which sport
-	city VARCHAR(100) DEFAULT NULL,
-	arena_id INT DEFAULT NULL,
-	desired_date DATE NOT NULL,
-	start_time TIME NOT NULL,
-	end_time TIME NOT NULL,
-	preferred_match_size INT DEFAULT 2, -- total players desired
-	min_skill_level_id INT DEFAULT NULL,
-	max_skill_level_id INT DEFAULT NULL,
-	status ENUM('open','matched','cancelled','expired') DEFAULT 'open',
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (player_id) REFERENCES players(id),
-	FOREIGN KEY (court_type_id) REFERENCES court_types(id),
-	FOREIGN KEY (arena_id) REFERENCES arenas(id),
-	FOREIGN KEY (min_skill_level_id) REFERENCES skill_levels(id),
-	FOREIGN KEY (max_skill_level_id) REFERENCES skill_levels(id)
-);
+-- CREATE TABLE IF NOT EXISTS matchmaking_requests (
+-- 	id INT AUTO_INCREMENT PRIMARY KEY,
+-- 	player_id INT NOT NULL,
+-- 	court_type_id INT NOT NULL,   -- which sport
+-- 	city VARCHAR(100) DEFAULT NULL,
+-- 	arena_id INT DEFAULT NULL,
+-- 	desired_date DATE NOT NULL,
+-- 	start_time TIME NOT NULL,
+-- 	end_time TIME NOT NULL,
+-- 	preferred_match_size INT DEFAULT 2, -- total players desired
+-- 	min_skill_level_id INT DEFAULT NULL,
+-- 	max_skill_level_id INT DEFAULT NULL,
+-- 	status ENUM('open','matched','cancelled','expired') DEFAULT 'open',
+-- 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- 	FOREIGN KEY (player_id) REFERENCES players(id),
+-- 	FOREIGN KEY (court_type_id) REFERENCES court_types(id),
+-- 	FOREIGN KEY (arena_id) REFERENCES arenas(id),
+-- 	FOREIGN KEY (min_skill_level_id) REFERENCES skill_levels(id),
+-- 	FOREIGN KEY (max_skill_level_id) REFERENCES skill_levels(id)
+-- );
 
 
 -- Groups created by the matchmaking engine (one group per actual game)
-CREATE TABLE IF NOT EXISTS matchmaking_groups (
-	id INT AUTO_INCREMENT PRIMARY KEY,
-	court_type_id INT NOT NULL,
-	arena_id INT DEFAULT NULL,
-	booking_id INT DEFAULT NULL, -- link to bookings once a court is reserved
-	status ENUM('pending','confirmed','completed','cancelled') DEFAULT 'pending',
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (court_type_id) REFERENCES court_types(id),
-	FOREIGN KEY (arena_id) REFERENCES arenas(id),
-	FOREIGN KEY (booking_id) REFERENCES bookings(id)
-);
+-- CREATE TABLE IF NOT EXISTS matchmaking_groups (
+-- 	id INT AUTO_INCREMENT PRIMARY KEY,
+-- 	court_type_id INT NOT NULL,
+-- 	arena_id INT DEFAULT NULL,
+-- 	booking_id INT DEFAULT NULL, -- link to bookings once a court is reserved
+-- 	status ENUM('pending','confirmed','completed','cancelled') DEFAULT 'pending',
+-- 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- 	FOREIGN KEY (court_type_id) REFERENCES court_types(id),
+-- 	FOREIGN KEY (arena_id) REFERENCES arenas(id),
+-- 	FOREIGN KEY (booking_id) REFERENCES bookings(id)
+-- );
 
 
 -- Players participating in a matchmaking group
-CREATE TABLE IF NOT EXISTS matchmaking_group_players (
-	id INT AUTO_INCREMENT PRIMARY KEY,
-	group_id INT NOT NULL,
-	player_id INT NOT NULL,
-	from_request_id INT DEFAULT NULL,
-	role ENUM('host','guest') DEFAULT 'guest',
-	joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (group_id) REFERENCES matchmaking_groups(id),
-	FOREIGN KEY (player_id) REFERENCES players(id),
-	FOREIGN KEY (from_request_id) REFERENCES matchmaking_requests(id)
-);
-
+-- CREATE TABLE IF NOT EXISTS matchmaking_group_players (
+-- 	id INT AUTO_INCREMENT PRIMARY KEY,
+-- 	group_id INT NOT NULL,
+-- 	player_id INT NOT NULL,
+-- 	from_request_id INT DEFAULT NULL,
+-- 	role ENUM('host','guest') DEFAULT 'guest',
+-- 	joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- 	FOREIGN KEY (group_id) REFERENCES matchmaking_groups(id),
+-- 	FOREIGN KEY (player_id) REFERENCES players(id),
+-- 	FOREIGN KEY (from_request_id) REFERENCES matchmaking_requests(id)
+-- );
 
 /* ==========================================================
 	 Seed Data (Minimal, can be extended)
@@ -578,28 +587,28 @@ INSERT INTO court_sports (court_id, court_type_id) VALUES
 (13, 6), (13, 3);       -- arena 5
 
 
--- Example matchmaking request
-INSERT INTO matchmaking_requests (
-	player_id, court_type_id, city, arena_id, desired_date, start_time, end_time,
-	preferred_match_size, min_skill_level_id, max_skill_level_id
-)
-VALUES (
-	1,         -- player
-	4,         -- Futsal
-	'Karachi',
-	1,         -- Alleyoop Sports Complex
-	'2025-12-05',
-	'18:00:00',
-	'19:30:00',
-	10,        -- 5v5
-	2,         -- Intermediate
-	3          -- Advanced
-);
+-- -- Example matchmaking request
+-- INSERT INTO matchmaking_requests (
+-- 	player_id, court_type_id, city, arena_id, desired_date, start_time, end_time,
+-- 	preferred_match_size, min_skill_level_id, max_skill_level_id
+-- )
+-- VALUES (
+-- 	1,         -- player
+-- 	4,         -- Futsal
+-- 	'Karachi',
+-- 	1,         -- Alleyoop Sports Complex
+-- 	'2025-12-05',
+-- 	'18:00:00',
+-- 	'19:30:00',
+-- 	10,        -- 5v5
+-- 	2,         -- Intermediate
+-- 	3          -- Advanced
+-- );
 
 -- Dummy court bookings for testing
 INSERT INTO bookings (
 	player_id, arena_id, court_id, court_type_id, booking_date, start_time, end_time,
-	status_id, participants_count
+	status_id, is_private, participants_count
 )
 VALUES
 (
@@ -611,6 +620,7 @@ VALUES
 	'18:00:00',
 	'19:00:00',
 	2, -- confirmed
+	0, -- public booking
 	10
 ),
 (
@@ -622,6 +632,7 @@ VALUES
 	'20:00:00',
 	'21:30:00',
 	1, -- pending
+	1, -- private booking
 	4
 ),
 (
@@ -633,6 +644,7 @@ VALUES
 	'17:00:00',
 	'18:30:00',
 	2, -- confirmed
+	0, -- public booking
 	8
 ),
 (
@@ -644,6 +656,7 @@ VALUES
 	'19:00:00',
 	'20:00:00',
 	4, -- completed
+	0, -- public booking
 	2
 ),
 (
@@ -655,6 +668,7 @@ VALUES
 	'07:00:00',
 	'08:00:00',
 	2, -- confirmed
+	0, -- public booking
 	10
 );
 
