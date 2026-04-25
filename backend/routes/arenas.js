@@ -41,6 +41,7 @@ function normalizeCourtInput(courts = []) {
 
   return courts
     .map((court, index) => {
+      const id = Number.isFinite(Number(court.id)) ? Number(court.id) : null;
       const name = String(court.name || `Court ${index + 1}`).trim();
       const pricePerHour = Number.isFinite(Number(court.pricePerHour)) ? Number(court.pricePerHour) : null;
       const isIndoor = court.isIndoor ? 1 : 0;
@@ -49,6 +50,7 @@ function normalizeCourtInput(courts = []) {
         : [];
 
       return {
+        id,
         name,
         pricePerHour,
         isIndoor,
@@ -79,24 +81,126 @@ async function replaceArenaCourts(arenaId, courts) {
     }
   }
 
-  await dbp.query('DELETE cs FROM court_sports cs JOIN courts c ON cs.court_id = c.id WHERE c.arena_id = ?', [arenaId]);
-  await dbp.query('DELETE FROM courts WHERE arena_id = ?', [arenaId]);
+  const [existingCourtRows] = await dbp.query('SELECT id FROM courts WHERE arena_id = ?', [arenaId]);
+  const existingCourtIds = existingCourtRows.map((row) => row.id);
+  const existingCourtIdSet = new Set(existingCourtIds);
 
-  for (const court of courts) {
-    const [insertCourtResult] = await dbp.query(
-      'INSERT INTO courts (arena_id, name, price_per_hour, is_indoor) VALUES (?, ?, ?, ?)',
-      [arenaId, court.name, court.pricePerHour, court.isIndoor],
+  // Courts referenced by other tables can't be deleted without cascade.
+  let protectedCourtRows = [];
+  try {
+    // Include trainer_time_slots when present.
+    const [rows] = await dbp.query(
+      `
+        SELECT DISTINCT court_id FROM bookings WHERE arena_id = ?
+        UNION
+        SELECT DISTINCT court_id FROM trainer_time_slots WHERE arena_id = ?
+      `,
+      [arenaId, arenaId],
     );
+    protectedCourtRows = rows;
+  } catch (err) {
+    if (err && err.code === 'ER_NO_SUCH_TABLE') {
+      const [rows] = await dbp.query('SELECT DISTINCT court_id FROM bookings WHERE arena_id = ?', [arenaId]);
+      protectedCourtRows = rows;
+    } else {
+      throw err;
+    }
+  }
+  const protectedCourtIdSet = new Set(protectedCourtRows.map((row) => row.court_id));
 
-    const courtId = insertCourtResult.insertId;
+  const incomingHasAnyIds = courts.some((c) => Number.isInteger(c.id));
+
+  // Backwards compatibility: if client doesn't send court ids, we can only do a full replace.
+  // If any court is referenced, full replace would fail, so we surface a clear conflict.
+  if (existingCourtIds.length > 0 && !incomingHasAnyIds) {
+    if (protectedCourtIdSet.size > 0) {
+      const conflictErr = new Error(
+        'Arena has existing bookings; cannot replace courts without court ids. Please fetch arena details and send each court with its id when updating.',
+      );
+      conflictErr.statusCode = 409;
+      throw conflictErr;
+    }
+
+    await dbp.query('DELETE cs FROM court_sports cs JOIN courts c ON cs.court_id = c.id WHERE c.arena_id = ?', [arenaId]);
+    await dbp.query('DELETE FROM courts WHERE arena_id = ?', [arenaId]);
+
+    for (const court of courts) {
+      const [insertCourtResult] = await dbp.query(
+        'INSERT INTO courts (arena_id, name, price_per_hour, is_indoor) VALUES (?, ?, ?, ?)',
+        [arenaId, court.name, court.pricePerHour, court.isIndoor],
+      );
+
+      const courtId = insertCourtResult.insertId;
+      const uniqueSports = [...new Set(court.sports.map((s) => String(s).toLowerCase()))];
+
+      for (const sport of uniqueSports) {
+        await dbp.query(
+          'INSERT INTO court_sports (court_id, court_type_id) VALUES (?, ?)',
+          [courtId, courtTypeMap.get(sport)],
+        );
+      }
+    }
+
+    return;
+  }
+
+  const incomingCourtIds = new Set(
+    courts
+      .filter((c) => Number.isInteger(c.id))
+      .map((c) => c.id),
+  );
+
+  // Upsert courts
+  for (const court of courts) {
+    let courtId;
+
+    if (Number.isInteger(court.id)) {
+      if (!existingCourtIdSet.has(court.id)) {
+        const badReqErr = new Error(`Invalid court id: ${court.id}`);
+        badReqErr.statusCode = 400;
+        throw badReqErr;
+      }
+
+      await dbp.query(
+        'UPDATE courts SET name = ?, price_per_hour = ?, is_indoor = ? WHERE id = ? AND arena_id = ?',
+        [court.name, court.pricePerHour, court.isIndoor, court.id, arenaId],
+      );
+      courtId = court.id;
+    } else {
+      const [insertCourtResult] = await dbp.query(
+        'INSERT INTO courts (arena_id, name, price_per_hour, is_indoor) VALUES (?, ?, ?, ?)',
+        [arenaId, court.name, court.pricePerHour, court.isIndoor],
+      );
+      courtId = insertCourtResult.insertId;
+    }
+
+    // Replace sports for this court
+    await dbp.query('DELETE FROM court_sports WHERE court_id = ?', [courtId]);
+
     const uniqueSports = [...new Set(court.sports.map((s) => String(s).toLowerCase()))];
-
     for (const sport of uniqueSports) {
       await dbp.query(
         'INSERT INTO court_sports (court_id, court_type_id) VALUES (?, ?)',
         [courtId, courtTypeMap.get(sport)],
       );
     }
+  }
+
+  // Delete courts removed by the client (only allowed if not referenced)
+  const removedCourtIds = existingCourtIds.filter((id) => !incomingCourtIds.has(id));
+  if (removedCourtIds.length > 0) {
+    const blocked = removedCourtIds.filter((id) => protectedCourtIdSet.has(id));
+    if (blocked.length > 0) {
+      const conflictErr = new Error(
+        'Cannot remove one or more courts because they have existing bookings or time slots. Remove those bookings/slots first, or keep the courts.',
+      );
+      conflictErr.statusCode = 409;
+      conflictErr.blockedCourtIds = blocked;
+      throw conflictErr;
+    }
+
+    await dbp.query('DELETE FROM court_sports WHERE court_id IN (?)', [removedCourtIds]);
+    await dbp.query('DELETE FROM courts WHERE arena_id = ? AND id IN (?)', [arenaId, removedCourtIds]);
   }
 }
 
@@ -388,7 +492,11 @@ router.put('/arena/owner/:id', async (req, res) => {
   } catch (err) {
     await dbp.rollback();
     console.error('Error updating arena:', err);
-    return res.status(500).json({ error: err.message || 'Database error' });
+    const status = err.statusCode && Number.isInteger(err.statusCode) ? err.statusCode : 500;
+    return res.status(status).json({
+      error: err.message || 'Database error',
+      blockedCourtIds: err.blockedCourtIds || undefined,
+    });
   }
 });
 
@@ -461,6 +569,19 @@ router.delete('/arena/:id', async (req, res) => {
 
   try {
     await dbp.beginTransaction();
+
+    // Trainer time slots reference courts; clear them first to avoid FK constraint issues.
+    // (Some deployments may not include trainer tables yet, so ignore missing tables.)
+    try {
+      await dbp.query(
+        'DELETE tb FROM trainer_bookings tb JOIN trainer_time_slots tts ON tb.trainer_time_slot_id = tts.id WHERE tts.arena_id = ?',
+        [arenaId],
+      );
+      await dbp.query('DELETE FROM trainer_time_slots WHERE arena_id = ?', [arenaId]);
+      await dbp.query('DELETE FROM trainer_venues WHERE arena_id = ?', [arenaId]);
+    } catch (err) {
+      if (!(err && err.code === 'ER_NO_SUCH_TABLE')) throw err;
+    }
 
     await dbp.query('DELETE FROM bookings WHERE arena_id = ?', [arenaId]);
     await dbp.query('DELETE cs FROM court_sports cs JOIN courts c ON cs.court_id = c.id WHERE c.arena_id = ?', [arenaId]);

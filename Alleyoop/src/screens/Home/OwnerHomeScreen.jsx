@@ -144,6 +144,7 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
     const [courts, setCourts] = useState(
         initialData?.user?.courts?.length
             ? initialData.user.courts.map((court, index) => ({
+                id: court.id ?? null,
                 name: court.name || `Court ${index + 1}`,
                 pricePerHour: String(court.pricePerHour ?? initialData?.user?.pricePerHour ?? 0),
                 isIndoor: !!court.isIndoor,
@@ -255,7 +256,8 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
 
         setError('');
 
-        const payloadCourts = courts.map((court) => ({
+        let payloadCourts = courts.map((court) => ({
+            id: court.id ?? undefined,
             name: court.name.trim(),
             pricePerHour: Number(court.pricePerHour || 0),
             isIndoor: !!court.isIndoor,
@@ -270,6 +272,43 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
         if (mode === 'edit' && arenaId) {
             try {
                 setLoading(true);
+
+                const hasAtLeastOneCourtId = payloadCourts.some((court) => Number.isFinite(Number(court.id)));
+                if (!hasAtLeastOneCourtId) {
+                    const detailsResponse = await fetch(`${API_BASE_URL}/arena/get/${arenaId}`);
+                    const detailsData = await detailsResponse.json();
+
+                    if (!detailsResponse.ok) {
+                        throw new Error(detailsData.error || 'Failed to load latest arena details for update');
+                    }
+
+                    const existingCourts = Array.isArray(detailsData.courts) ? detailsData.courts : [];
+                    const usedIds = new Set();
+
+                    payloadCourts = payloadCourts.map((incomingCourt, index) => {
+                        const nameMatch = existingCourts.find((existing) => {
+                            const existingId = Number(existing.id);
+                            if (!Number.isFinite(existingId) || usedIds.has(existingId)) return false;
+                            return String(existing.name || '').trim().toLowerCase() === incomingCourt.name.toLowerCase();
+                        });
+
+                        if (nameMatch) {
+                            const matchedId = Number(nameMatch.id);
+                            usedIds.add(matchedId);
+                            return { ...incomingCourt, id: matchedId };
+                        }
+
+                        const indexMatch = existingCourts[index];
+                        const indexId = Number(indexMatch?.id);
+                        if (Number.isFinite(indexId) && !usedIds.has(indexId)) {
+                            usedIds.add(indexId);
+                            return { ...incomingCourt, id: indexId };
+                        }
+
+                        return incomingCourt;
+                    });
+                }
+
                 const originalThumbPath = initialData?.user?.image?.path || null;
                 const originalGallery = initialData?.user?.gallery || [];
                 const originalPaths = [
