@@ -167,6 +167,31 @@ router.post("/bookings/:id/join", async (req, res) => {
     }
 
     // 3. Add the player to the guest list
+    const [targetMatch] = await dbp.query(
+      `SELECT booking_date, start_time, end_time FROM bookings WHERE id = ?`,
+      [bookingId],
+    );
+    const { booking_date, start_time, end_time } = targetMatch[0];
+
+    const [conflicts] = await dbp.query(
+      `SELECT b.id 
+    FROM booking_participants bp
+    JOIN bookings b ON bp.booking_id = b.id
+    WHERE bp.player_id = ? 
+    AND b.booking_date = ? 
+    AND b.start_time < ? 
+    AND b.end_time > ?`,
+      [userId, booking_date, end_time, start_time],
+    );
+
+    if (conflicts.length > 0) {
+      await dbp.rollback();
+      return res.status(400).json({
+        error: "Schedule Conflict",
+        message:
+          "You are already registered for another match during this time.",
+      });
+    }
     await dbp.query(
       `INSERT INTO booking_participants (booking_id, player_id) VALUES (?, ?)`,
       [bookingId, userId],
@@ -280,6 +305,24 @@ router.get("/bookings/:userId", async (req, res) => {
   }
 });
 
+router.get("/bookings/:id/participants", async (req, res) => {
+  const bookingId = req.params.id;
+  const dbp = db.promise();
+
+  try {
+    const [rows] = await dbp.query(
+      `SELECT p.id, p.name, bp.joined_at 
+       FROM booking_participants bp
+       JOIN players p ON bp.player_id = p.id
+       WHERE bp.booking_id = ?`,
+      [bookingId],
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 // Get all open public bookings for the lobby
 router.get("/bookings/lobby/open", async (req, res) => {
   try {
@@ -311,6 +354,69 @@ router.get("/bookings/lobby/open", async (req, res) => {
     return res.json(results);
   } catch (err) {
     console.error("Error fetching lobby:", err);
+    return res.status(500).json({ error: "Database error" });
+  }
+});
+
+router.delete("/bookings/:id/cancel", async (req, res) => {
+  const bookingId = req.params.id;
+  const { userId } = req.body; // The person trying to cancel/leave
+  const dbp = db.promise();
+
+  if (!userId) return res.status(400).json({ error: "User ID required" });
+
+  try {
+    await dbp.beginTransaction();
+
+    // 1. Identify who this user is in relation to the booking
+    const [booking] = await dbp.query(
+      `SELECT player_id, is_private FROM bookings WHERE id = ?`,
+      [bookingId],
+    );
+
+    if (booking.length === 0) {
+      await dbp.rollback();
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    const isHost = booking[0].player_id === parseInt(userId);
+
+    if (isHost) {
+      // CASE 1: Host cancels -> Nuke everything
+      // (Note: This assumes you have ON DELETE CASCADE on your foreign keys.
+      // If not, you'd delete from booking_participants first.)
+      await dbp.query(`DELETE FROM bookings WHERE id = ?`, [bookingId]);
+      await dbp.commit();
+      return res
+        .status(200)
+        .json({ message: "Booking cancelled and deleted by host." });
+    } else {
+      // CASE 2: Participant leaves
+      const [result] = await dbp.query(
+        `DELETE FROM booking_participants WHERE booking_id = ? AND player_id = ?`,
+        [bookingId, userId],
+      );
+
+      if (result.affectedRows === 0) {
+        await dbp.rollback();
+        return res
+          .status(404)
+          .json({ error: "You are not a participant in this booking" });
+      }
+
+      // If the lobby was private (full), open it back up!
+      if (booking[0].is_private === 1) {
+        await dbp.query(`UPDATE bookings SET is_private = 0 WHERE id = ?`, [
+          bookingId,
+        ]);
+      }
+
+      await dbp.commit();
+      return res.status(200).json({ message: "You have left the match." });
+    }
+  } catch (err) {
+    await dbp.rollback();
+    console.error("Error during cancellation:", err);
     return res.status(500).json({ error: "Database error" });
   }
 });

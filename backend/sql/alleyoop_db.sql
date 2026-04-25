@@ -382,7 +382,7 @@ CREATE TABLE IF NOT EXISTS booking_participants (
   booking_id INT NOT NULL,
   player_id INT NOT NULL,
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (booking_id) REFERENCES bookings(id),
+  FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
   FOREIGN KEY (player_id) REFERENCES players(id)
 );
 
@@ -454,6 +454,30 @@ VALUES (
 	'03001234567',
 	1,
 	2 -- Intermediate
+),
+(
+	'sara.khan@example.com',
+	'$2b$10$533qJn3SLMwXHwsUs.WtQexDbAPZYcKw7isfsPwVInWwhSZkcC9l.',
+	'Sara Khan',
+	'03331234567',
+	1,
+	2
+),
+(
+	"ahmed.raza@example.com",
+	'$2b$10$533qJn3SLMwXHwsUs.WtQexDbAPZYcKw7isfsPwVInWwhSZkcC9l.',
+	'Ahmed Raza',
+	'03001234567',
+	1,
+	2
+),
+(
+	"bilal.q@example.com",
+	'$2b$10$533qJn3SLMwXHwsUs.WtQexDbAPZYcKw7isfsPwVInWwhSZkcC9l.',
+	'Bilal Qureshi',
+	'03451234567',
+	1,
+	2
 );
 
 -- Dummy arena owner & arena
