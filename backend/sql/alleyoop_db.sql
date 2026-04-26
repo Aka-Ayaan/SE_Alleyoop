@@ -457,6 +457,31 @@ VALUES (
 	1
 );
 
+-- Dummy seller
+INSERT INTO sellers (owner_name, shop_name, email, phone, password_hash, is_active)
+VALUES (
+	'Sample Seller',
+	'Alleyoop Sports Store',
+	'seller@example.com',
+	'03003334444',
+	'$2b$10$533qJn3SLMwXHwsUs.WtQexDbAPZYcKw7isfsPwVInWwhSZkcC9l.', -- 12345678
+	1
+);
+
+-- Dummy trainer
+INSERT INTO trainers (name, email, phone, password_hash, is_active, primary_sport_id, skill_level_id, hourly_rate, bio)
+VALUES (
+	'Sample Trainer',
+	'trainer@example.com',
+	'03005556666',
+	'$2b$10$533qJn3SLMwXHwsUs.WtQexDbAPZYcKw7isfsPwVInWwhSZkcC9l.', -- 12345678
+	1,
+	6, -- Basketball
+	3, -- Advanced
+	2500.00,
+	'Experienced basketball and conditioning coach for intermediate to advanced players.'
+);
+
 INSERT INTO arenas (
 	owner_id, name, city, address, pricePerHour, availability, rating, timing,
 	total_courts,
