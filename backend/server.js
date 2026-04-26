@@ -10,7 +10,7 @@ const bookingRoutes = require('./routes/bookings');
 const shopRoutes = require('./routes/shop');
 const trainerRoutes = require('./routes/trainers');
 const reviewRoutes = require('./routes/reviews');
-const matchmakingRoutes = require('./routes/matchmaking');
+// const matchmakingRoutes = require('./routes/matchmaking');
 
 dotenv.config();
 
@@ -36,7 +36,7 @@ app.use(bookingRoutes);
 app.use(shopRoutes);
 app.use(trainerRoutes);
 app.use(reviewRoutes);
-app.use(matchmakingRoutes);
+// app.use(matchmakingRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
