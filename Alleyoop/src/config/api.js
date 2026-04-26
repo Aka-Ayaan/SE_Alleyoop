@@ -14,4 +14,5 @@ export const endpoints = {
   playerBookings: (userId) => `${API_BASE_URL}/bookings/${userId}`,
   publicBookingsLobby: `${API_BASE_URL}/bookings/lobby/open`,
   joinPublicBooking: (bookingId) => `${API_BASE_URL}/bookings/${bookingId}/join`,
+  cancelOrLeaveBooking: (bookingId) => `${API_BASE_URL}/bookings/${bookingId}/cancel`,
 };

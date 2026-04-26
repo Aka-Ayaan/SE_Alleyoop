@@ -14,7 +14,7 @@ import { SellerHomeScreen } from './src/screens/Home/SellerHomeScreen';
 import { TrainerHomeScreen } from './src/screens/Home/TrainerHomeScreen';
 
 export default function App() {
-  const [screen, setScreen] = useState('home');
+  const [screen, setScreen] = useState('login');
   const [user, setUser] = useState(null);
 
   const handleLoginSuccess = (userData) => {

@@ -949,6 +949,33 @@ const addHoursToDbTime = (startTime, hoursToAdd) => {
   return `${hh}:${mm}:${ss}`;
 };
 
+const addMinutesToDbTime = (startTime, minutesToAdd) => {
+  const [h = '0', m = '0', s = '0'] = String(startTime).split(':');
+  const date = new Date();
+  date.setHours(Number(h), Number(m), Number(s), 0);
+  date.setMinutes(date.getMinutes() + Number(minutesToAdd || 0));
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+};
+
+const toMinutes = (timeStr) => {
+  if (!timeStr) return null;
+  const [h = '0', m = '0'] = String(timeStr).split(':');
+  return Number(h) * 60 + Number(m);
+};
+
+const hasTimeOverlapOnDate = (aDate, aStart, aEnd, bDate, bStart, bEnd) => {
+  if (!aDate || !bDate || String(aDate) !== String(bDate)) return false;
+  const aStartM = toMinutes(aStart);
+  const aEndM = toMinutes(aEnd);
+  const bStartM = toMinutes(bStart);
+  const bEndM = toMinutes(bEnd);
+  if ([aStartM, aEndM, bStartM, bEndM].some((v) => v === null || Number.isNaN(v))) return false;
+  return aStartM < bEndM && aEndM > bStartM;
+};
+
 // ─── Placeholder data ────────────────────────────────────────────────────────
 
 const VENUE_POSTS = [
@@ -1925,7 +1952,11 @@ function BookingsScreen({
   publicBookingsLoading,
   privateBookingsLoading,
   onJoinBooking,
-  joiningBookingId,
+  onLeaveBooking,
+  onCancelPrivateBooking,
+  bookingActionId,
+  bookingActionType,
+  conflictingPublicBookingIds,
   currentUserId,
 }) {
   const [bookingView, setBookingView] = useState('public');
@@ -2032,6 +2063,30 @@ function BookingsScreen({
             const spots = item.spotsTotal - item.spotsFilled;
             const isOwnMatch = Number(item.hostPlayerId) === Number(currentUserId);
             const isAlreadyJoined = Boolean(item.isJoined);
+            const hasTimeConflict = Boolean(conflictingPublicBookingIds?.has(item.id));
+            const isProcessing = bookingActionId === item.id;
+            const isLeaveOrCancel = isOwnMatch || isAlreadyJoined;
+            const isJoinDisabled = spots <= 0;
+            const actionDisabled = isProcessing || (!isLeaveOrCancel && (isJoinDisabled || hasTimeConflict));
+            const actionIconName = isOwnMatch
+              ? 'close-circle-outline'
+              : (isAlreadyJoined ? 'exit-run' : (hasTimeConflict ? 'calendar-remove' : (spots > 0 ? 'account-plus' : 'account-off')));
+
+            let actionLabel = 'Join Match';
+            if (isProcessing) {
+              if (bookingActionType === 'cancel') actionLabel = 'Cancelling...';
+              else if (bookingActionType === 'leave') actionLabel = 'Leaving...';
+              else actionLabel = 'Joining...';
+            } else if (isOwnMatch) {
+              actionLabel = 'Cancel Booking';
+            } else if (isAlreadyJoined) {
+              actionLabel = 'Leave Match';
+            } else if (hasTimeConflict) {
+              actionLabel = 'Time Conflict';
+            } else if (spots <= 0) {
+              actionLabel = 'Game Full';
+            }
+
             return (
               <View style={styles.matchCard}>
                 <View style={styles.matchCardTop}>
@@ -2057,7 +2112,7 @@ function BookingsScreen({
                   <MaterialCommunityIcons name="account-outline" size={15} color={C.orange} />
                   <Text style={styles.matchInfoText}>Organised by {item.organizer}</Text>
                 </View>
-                {(isOwnMatch || isAlreadyJoined) ? (
+                {(isOwnMatch || isAlreadyJoined || hasTimeConflict) ? (
                   <View style={styles.matchStatusBadgeRow}>
                     {isOwnMatch ? (
                       <View style={[styles.matchStatusBadge, styles.matchStatusBadgeOwn]}>
@@ -2069,6 +2124,12 @@ function BookingsScreen({
                       <View style={[styles.matchStatusBadge, styles.matchStatusBadgeJoined]}>
                         <MaterialCommunityIcons name="check-decagram-outline" size={13} color={C.green} />
                         <Text style={[styles.matchStatusBadgeText, styles.matchStatusBadgeTextJoined]}>Already joined</Text>
+                      </View>
+                    ) : null}
+                    {hasTimeConflict ? (
+                      <View style={[styles.matchStatusBadge, styles.matchStatusBadgeConflict]}>
+                        <MaterialCommunityIcons name="calendar-alert-outline" size={13} color={C.red} />
+                        <Text style={[styles.matchStatusBadgeText, styles.matchStatusBadgeTextConflict]}>Conflicts with your schedule</Text>
                       </View>
                     ) : null}
                   </View>
@@ -2088,18 +2149,22 @@ function BookingsScreen({
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.joinBtn, (spots <= 0 || joiningBookingId === item.id || isOwnMatch || isAlreadyJoined) && styles.joinBtnDisabled]}
-                  disabled={spots <= 0 || joiningBookingId === item.id || isOwnMatch || isAlreadyJoined}
-                  onPress={() => onJoinBooking && onJoinBooking(item)}
+                  style={[
+                    styles.joinBtn,
+                    isLeaveOrCancel && styles.joinBtnDanger,
+                    actionDisabled && styles.joinBtnDisabled,
+                  ]}
+                  disabled={actionDisabled}
+                  onPress={() => {
+                    if (isLeaveOrCancel) {
+                      onLeaveBooking && onLeaveBooking(item);
+                      return;
+                    }
+                    onJoinBooking && onJoinBooking(item);
+                  }}
                 >
-                  <MaterialCommunityIcons name={spots > 0 ? 'account-plus' : 'account-off'} size={16} color={C.white} />
-                  <Text style={styles.joinBtnText}>
-                    {isOwnMatch
-                      ? 'Your Match'
-                      : (isAlreadyJoined
-                        ? 'Already Joined'
-                        : (joiningBookingId === item.id ? 'Joining...' : (spots > 0 ? 'Join Match' : 'Game Full')))}
-                  </Text>
+                  <MaterialCommunityIcons name={actionIconName} size={16} color={C.white} />
+                  <Text style={styles.joinBtnText}>{actionLabel}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -2133,7 +2198,9 @@ function BookingsScreen({
               <Text style={styles.matchmakingSubheading}>Manage your own bookings or join public games</Text>
             </View>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item }) => {
+            const isCancellingThisPrivate = bookingActionId === item.id && bookingActionType === 'cancel';
+            return (
             <View style={styles.matchCard}>
               <View style={styles.matchCardTop}>
                 <View style={styles.matchSportBadge}>
@@ -2165,8 +2232,18 @@ function BookingsScreen({
                   <Text style={[styles.matchStatusBadgeText, styles.matchStatusBadgeTextOwn]}>Private booking</Text>
                 </View>
               </View>
+
+              <TouchableOpacity
+                style={[styles.joinBtn, styles.joinBtnDanger, isCancellingThisPrivate && styles.joinBtnDisabled]}
+                disabled={isCancellingThisPrivate}
+                onPress={() => onCancelPrivateBooking && onCancelPrivateBooking(item)}
+              >
+                <MaterialCommunityIcons name="close-circle-outline" size={16} color={C.white} />
+                <Text style={styles.joinBtnText}>{isCancellingThisPrivate ? 'Cancelling...' : 'Cancel Booking'}</Text>
+              </TouchableOpacity>
             </View>
-          )}
+          );
+          }}
           ListEmptyComponent={
             <View style={styles.emptyMatchState}>
               {privateBookingsLoading ? (
@@ -2322,7 +2399,8 @@ export function HomeScreen({ user, onLogout }) {
   const [publicBookingsLoading, setPublicBookingsLoading] = useState(false);
   const [privateBookings, setPrivateBookings] = useState([]);
   const [privateBookingsLoading, setPrivateBookingsLoading] = useState(false);
-  const [joiningBookingId, setJoiningBookingId] = useState(null);
+  const [bookingActionId, setBookingActionId] = useState(null);
+  const [bookingActionType, setBookingActionType] = useState(null);
   const [courtTypeIdByName, setCourtTypeIdByName] = useState({});
 
   const translateX = useRef(new Animated.Value(0)).current;
@@ -2419,6 +2497,9 @@ export function HomeScreen({ user, onLogout }) {
         bookingId: booking.bookingId,
         hostPlayerId: booking.hostPlayerId,
         isJoined: Number(booking.joined_by_user) > 0,
+        rawDate: booking.date,
+        rawStartTime: booking.startTime,
+        rawEndTime: booking.endTime,
         venue: booking.arenaName,
         sport: booking.sportName,
         date: toDisplayDate(booking.date),
@@ -2457,6 +2538,9 @@ export function HomeScreen({ user, onLogout }) {
       const mapped = (data.bookings || []).map((booking) => ({
         id: String(booking.bookingId),
         bookingId: booking.bookingId,
+        rawBookingDate: booking.bookingDate,
+        rawStartTime: booking.startTime,
+        rawEndTime: addMinutesToDbTime(booking.startTime, Math.max(1, Math.round(Number(booking.duration || 60)))),
         arenaName: booking.arenaName,
         courtName: booking.courtName,
         sportName: booking.sportName,
@@ -2474,6 +2558,55 @@ export function HomeScreen({ user, onLogout }) {
       setPrivateBookingsLoading(false);
     }
   }, [user]);
+
+  const conflictingPublicBookingIds = useMemo(() => {
+    if (!user?.userId) return new Set();
+
+    const engagedSlots = [];
+
+    publicBookings.forEach((booking) => {
+      const isOwnOrJoined = Number(booking.hostPlayerId) === Number(user.userId) || Boolean(booking.isJoined);
+      if (!isOwnOrJoined) return;
+      engagedSlots.push({
+        bookingId: Number(booking.bookingId),
+        date: booking.rawDate,
+        start: booking.rawStartTime,
+        end: booking.rawEndTime,
+      });
+    });
+
+    privateBookings.forEach((booking) => {
+      if (String(booking.status || '').toLowerCase() === 'cancelled') return;
+      engagedSlots.push({
+        bookingId: Number(booking.bookingId),
+        date: booking.rawBookingDate,
+        start: booking.rawStartTime,
+        end: booking.rawEndTime,
+      });
+    });
+
+    const conflicts = new Set();
+    publicBookings.forEach((booking) => {
+      const isOwnOrJoined = Number(booking.hostPlayerId) === Number(user.userId) || Boolean(booking.isJoined);
+      if (isOwnOrJoined) return;
+
+      const overlaps = engagedSlots.some((slot) => (
+        Number(slot.bookingId) !== Number(booking.bookingId)
+        && hasTimeOverlapOnDate(
+          booking.rawDate,
+          booking.rawStartTime,
+          booking.rawEndTime,
+          slot.date,
+          slot.start,
+          slot.end,
+        )
+      ));
+
+      if (overlaps) conflicts.add(booking.id);
+    });
+
+    return conflicts;
+  }, [publicBookings, privateBookings, user]);
 
   const refreshBookingTabs = useCallback(() => {
     loadPublicBookings();
@@ -2528,7 +2661,13 @@ export function HomeScreen({ user, onLogout }) {
       return;
     }
 
-    setJoiningBookingId(booking.id);
+    if (conflictingPublicBookingIds.has(booking.id)) {
+      Alert.alert('Time conflict', 'You already have another booking that overlaps with this match.');
+      return;
+    }
+
+    setBookingActionId(booking.id);
+    setBookingActionType('join');
     try {
       const response = await fetch(endpoints.joinPublicBooking(booking.bookingId), {
         method: 'POST',
@@ -2538,6 +2677,11 @@ export function HomeScreen({ user, onLogout }) {
       const data = await response.json();
 
       if (!response.ok) {
+        const errorText = String(data?.error || '').toLowerCase();
+        if (errorText.includes('schedule conflict')) {
+          Alert.alert('Time conflict', data.message || 'You are already registered for another overlapping match.');
+          return;
+        }
         Alert.alert('Could not join', data.error || data.message || 'Join request failed.');
         return;
       }
@@ -2547,9 +2691,107 @@ export function HomeScreen({ user, onLogout }) {
     } catch (err) {
       Alert.alert('Could not join', 'Could not reach server. Please try again.');
     } finally {
-      setJoiningBookingId(null);
+      setBookingActionId(null);
+      setBookingActionType(null);
     }
-  }, [user, loadPublicBookings]);
+  }, [user, loadPublicBookings, conflictingPublicBookingIds]);
+
+  const leaveOrCancelPublicBooking = useCallback((booking) => {
+    if (!user?.userId) {
+      Alert.alert('Not logged in', 'Please log in again and try again.');
+      return;
+    }
+
+    const isOwnMatch = Number(booking.hostPlayerId) === Number(user.userId);
+    const actionType = isOwnMatch ? 'cancel' : 'leave';
+    const confirmTitle = isOwnMatch ? 'Cancel this booking?' : 'Leave this match?';
+    const confirmMessage = isOwnMatch
+      ? 'This will cancel the booking for everyone and remove it from the lobby.'
+      : 'You will be removed from this public match.';
+    const confirmButtonText = isOwnMatch ? 'Cancel Booking' : 'Leave Match';
+
+    Alert.alert(confirmTitle, confirmMessage, [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: confirmButtonText,
+        style: 'destructive',
+        onPress: async () => {
+          setBookingActionId(booking.id);
+          setBookingActionType(actionType);
+
+          try {
+            const response = await fetch(endpoints.cancelOrLeaveBooking(booking.bookingId), {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: user.userId }),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+              Alert.alert('Action failed', data.error || data.message || 'Could not update booking.');
+              return;
+            }
+
+            Alert.alert(
+              isOwnMatch ? 'Booking cancelled' : 'Left match',
+              data.message || (isOwnMatch ? 'Your booking was cancelled.' : 'You have left the match.'),
+            );
+            refreshBookingTabs();
+          } catch (err) {
+            Alert.alert('Action failed', 'Could not reach server. Please try again.');
+          } finally {
+            setBookingActionId(null);
+            setBookingActionType(null);
+          }
+        },
+      },
+    ]);
+  }, [user, refreshBookingTabs]);
+
+  const cancelPrivateBooking = useCallback((booking) => {
+    if (!user?.userId) {
+      Alert.alert('Not logged in', 'Please log in again and try again.');
+      return;
+    }
+
+    Alert.alert(
+      'Cancel this private booking?',
+      'This will cancel your private booking.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel Booking',
+          style: 'destructive',
+          onPress: async () => {
+            setBookingActionId(booking.id);
+            setBookingActionType('cancel');
+
+            try {
+              const response = await fetch(endpoints.cancelOrLeaveBooking(booking.bookingId), {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.userId }),
+              });
+              const data = await response.json();
+
+              if (!response.ok) {
+                Alert.alert('Could not cancel', data.error || data.message || 'Could not cancel booking.');
+                return;
+              }
+
+              Alert.alert('Booking cancelled', data.message || 'Your private booking was cancelled.');
+              refreshBookingTabs();
+            } catch (err) {
+              Alert.alert('Could not cancel', 'Could not reach server. Please try again.');
+            } finally {
+              setBookingActionId(null);
+              setBookingActionType(null);
+            }
+          },
+        },
+      ],
+    );
+  }, [user, refreshBookingTabs]);
 
   const renderSubScreen = () => {
     if (!activeSubScreen) return null;
@@ -2652,7 +2894,11 @@ export function HomeScreen({ user, onLogout }) {
                   publicBookingsLoading={publicBookingsLoading}
                   privateBookingsLoading={privateBookingsLoading}
                   onJoinBooking={joinPublicBooking}
-                  joiningBookingId={joiningBookingId}
+                  onLeaveBooking={leaveOrCancelPublicBooking}
+                  onCancelPrivateBooking={cancelPrivateBooking}
+                  bookingActionId={bookingActionId}
+                  bookingActionType={bookingActionType}
+                  conflictingPublicBookingIds={conflictingPublicBookingIds}
                   currentUserId={user?.userId}
                 />
               </View>
@@ -3394,6 +3640,7 @@ const styles = StyleSheet.create({
   },
   bookingToggleRow: {
     marginHorizontal: 12,
+    marginTop: 8,
     marginBottom: 4,
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -3532,6 +3779,13 @@ const styles = StyleSheet.create({
   matchStatusBadgeTextJoined: {
     color: C.green,
   },
+  matchStatusBadgeConflict: {
+    backgroundColor: '#FDEDEE',
+    borderColor: '#F7C2C5',
+  },
+  matchStatusBadgeTextConflict: {
+    color: C.red,
+  },
   spotsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -3556,6 +3810,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     marginTop: 12,
+  },
+  joinBtnDanger: {
+    backgroundColor: C.red,
   },
   joinBtnDisabled: {
     backgroundColor: C.mutedText,

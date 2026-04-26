@@ -142,7 +142,10 @@ router.post("/bookings/:id/join", async (req, res) => {
 
     // 1. Check if the booking exists and is currently public (is_private = 0)
     const [bookingRows] = await dbp.query(
-      `SELECT player_id, participants_count, is_private FROM bookings WHERE id = ? FOR UPDATE`,
+      `SELECT id, player_id, participants_count, is_private, status_id, booking_date, start_time, end_time
+       FROM bookings
+       WHERE id = ?
+       FOR UPDATE`,
       [bookingId],
     );
 
@@ -153,7 +156,15 @@ router.post("/bookings/:id/join", async (req, res) => {
         .json({ error: "Lobby not found or no longer public" });
     }
 
-    const { player_id, participants_count } = bookingRows[0];
+    const {
+      id: targetBookingId,
+      player_id,
+      participants_count,
+      status_id,
+      booking_date,
+      start_time,
+      end_time,
+    } = bookingRows[0];
 
     if (Number(player_id) === Number(userId)) {
       await dbp.rollback();
@@ -171,22 +182,28 @@ router.post("/bookings/:id/join", async (req, res) => {
       return res.status(400).json({ error: "You are already in this lobby" });
     }
 
-    // 3. Add the player to the guest list
-    const [targetMatch] = await dbp.query(
-      `SELECT booking_date, start_time, end_time FROM bookings WHERE id = ?`,
-      [bookingId],
-    );
-    const { booking_date, start_time, end_time } = targetMatch[0];
-
+    // 3. Prevent overlaps with any active booking where user is host or participant
+    // Compare with target booking window directly in SQL to avoid date/time conversion issues.
     const [conflicts] = await dbp.query(
-      `SELECT b.id 
-    FROM booking_participants bp
-    JOIN bookings b ON bp.booking_id = b.id
-    WHERE bp.player_id = ? 
-    AND b.booking_date = ? 
-    AND b.start_time < ? 
-    AND b.end_time > ?`,
-      [userId, booking_date, end_time, start_time],
+      `SELECT b.id, b.player_id AS hostPlayerId, b.booking_date, b.start_time, b.end_time, b.status_id
+       FROM bookings b
+       JOIN bookings target ON target.id = ?
+       WHERE b.id <> target.id
+         AND b.status_id IN (1, 2)
+         AND b.booking_date = target.booking_date
+         AND b.start_time < target.end_time
+         AND b.end_time > target.start_time
+         AND (
+           b.player_id = ?
+           OR EXISTS (
+             SELECT 1
+             FROM booking_participants bp
+             WHERE bp.booking_id = b.id
+               AND bp.player_id = ?
+           )
+         )
+       LIMIT 1`,
+      [bookingId, userId, userId],
     );
 
     if (conflicts.length > 0) {
