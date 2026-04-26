@@ -94,19 +94,42 @@ export function SignupScreen({ onSwitchToLogin }) {
   };
 
   const handleSignup = async () => {
-    setError('');
-    setSuccess('');
+  setError('');
+  setSuccess('');
 
-    if (!name || !email || !password) {
-      setError('Name, email, and password are required.');
-      shakeError();
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      shakeError();
-      return;
-    }
+  if (!name || !email || !password) {
+    setError('Name, email, and password are required.');
+    shakeError();
+    return;
+  }
+
+  // Name: no numbers allowed
+  if (/\d/.test(name)) {
+    setError('Name cannot contain numbers.');
+    shakeError();
+    return;
+  }
+
+  // Email: regex check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    setError('Please enter a valid email address.');
+    shakeError();
+    return;
+  }
+
+  // Phone: if provided, must be digits only (with optional +, spaces, dashes)
+  if (phone && !/^\+?[\d\s\-()]{7,15}$/.test(phone)) {
+    setError('Please enter a valid phone number.');
+    shakeError();
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    setError('Passwords do not match.');
+    shakeError();
+    return;
+  }
 
     const payload = {
       name,

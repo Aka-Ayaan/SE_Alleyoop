@@ -382,6 +382,20 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add', tra
             return;
         }
 
+        // Price: must be a valid positive number
+        if (isNaN(Number(pricePerSession)) || Number(pricePerSession) <= 0) {
+            setError('Please enter a valid price per session.');
+            shakeError();
+            return;
+        }
+
+        // Duration: must be a valid positive number if provided
+        if (duration && (isNaN(Number(duration)) || Number(duration) <= 0)) {
+            setError('Please enter a valid duration.');
+            shakeError();
+            return;
+        }
+
         setError('');
         setLoading(true);
 

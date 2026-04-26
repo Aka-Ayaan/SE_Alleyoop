@@ -66,6 +66,13 @@ export function ResendVerificationScreen({ onBackToLogin }) {
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
+      shakeError();
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(endpoints.resendVerification, {
