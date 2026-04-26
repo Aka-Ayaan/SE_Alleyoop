@@ -2097,8 +2097,8 @@ function BookingsScreen({
                     {isOwnMatch
                       ? 'Your Match'
                       : (isAlreadyJoined
-                          ? 'Already Joined'
-                          : (joiningBookingId === item.id ? 'Joining...' : (spots > 0 ? 'Join Match' : 'Game Full')))}
+                        ? 'Already Joined'
+                        : (joiningBookingId === item.id ? 'Joining...' : (spots > 0 ? 'Join Match' : 'Game Full')))}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2139,7 +2139,7 @@ function BookingsScreen({
                 <View style={styles.matchSportBadge}>
                   <Text style={styles.matchSportText}>{item.sportName}</Text>
                 </View>
-                <View style={[styles.levelBadge, { backgroundColor: privateStatusColor(item.status) + '22' }] }>
+                <View style={[styles.levelBadge, { backgroundColor: privateStatusColor(item.status) + '22' }]}>
                   <Text style={[styles.levelText, { color: privateStatusColor(item.status) }]}>{item.status}</Text>
                 </View>
               </View>
@@ -3201,6 +3201,8 @@ const styles = StyleSheet.create({
     color: C.white,
     fontWeight: '800',
     fontSize: 15,
+    paddingLeft: 20,
+    paddingRight: 20,
   },
   contactRow: {
     flexDirection: 'row',
