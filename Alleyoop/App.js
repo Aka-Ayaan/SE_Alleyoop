@@ -4,6 +4,8 @@ import { View, Button } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LoginScreen } from './src/screens/Auth/LoginScreen';
 import { SignupScreen } from './src/screens/Auth/SignupScreen';
+import { ResendVerificationScreen } from './src/screens/Auth/ResendVerificationScreen';
+import { ForgotPasswordScreen } from './src/screens/Auth/ForgotPasswordScreen';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
 import { TestUploadScreen } from './src/screens/TestUploadScreen';
 import { TestCardsScreen } from './src/screens/TestCardsScreen';
@@ -48,10 +50,20 @@ export default function App() {
         <LoginScreen
           onSwitchToSignup={() => setScreen('signup')}
           onLoginSuccess={handleLoginSuccess}
+          onOpenResendVerification={() => setScreen('resend-verification')}
+          onOpenForgotPassword={() => setScreen('forgot-password')}
         />
       )}
       <StatusBar style="auto" />
       {screen === 'signup' && (<SignupScreen onSwitchToLogin={() => setScreen('login')} />)}
+      <StatusBar style="auto" />
+      {screen === 'forgot-password' && (
+        <ForgotPasswordScreen onBackToLogin={() => setScreen('login')} />
+      )}
+      <StatusBar style="auto" />
+      {screen === 'resend-verification' && (
+        <ResendVerificationScreen onBackToLogin={() => setScreen('login')} />
+      )}
       <StatusBar style="auto" />
       {screen === 'home' && <HomeScreen user={user} onLogout={handleLogout} />}
       <StatusBar style="auto" />

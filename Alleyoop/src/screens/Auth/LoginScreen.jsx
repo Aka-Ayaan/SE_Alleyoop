@@ -51,7 +51,7 @@ const InputField = memo(function InputField({ icon, ...props }) {
   );
 });
 
-export function LoginScreen({ onSwitchToSignup, onLoginSuccess }) {
+export function LoginScreen({ onSwitchToSignup, onLoginSuccess, onOpenResendVerification, onOpenForgotPassword }) {
   const insets = useSafeAreaInsets(); // This gets the status bar height
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -174,6 +174,16 @@ export function LoginScreen({ onSwitchToSignup, onLoginSuccess }) {
                 autoCapitalize="none"
               />
 
+              <View style={styles.linkRow}>
+                <TouchableOpacity
+                  onPress={onOpenForgotPassword}
+                  style={styles.linkWrap}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.linkText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </View>
+
               {error ? (
                 <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
                   <Text style={styles.errorText}>⚠  {error}</Text>
@@ -198,6 +208,14 @@ export function LoginScreen({ onSwitchToSignup, onLoginSuccess }) {
                     </>
                   )}
                 </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={onOpenResendVerification}
+                style={[styles.linkWrap, styles.linkBelowLogin]}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.linkText}>Didn&apos;t get verification email?</Text>
               </TouchableOpacity>
 
               <View style={styles.divider}>
@@ -357,6 +375,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: C.brown,
     fontWeight: '500',
+  },
+  linkRow: {
+    marginTop: 10,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  linkWrap: {
+    alignSelf: 'flex-end',
+  },
+  linkWrapSpacing: {
+    marginTop: 6,
+  },
+  linkBelowLogin: {
+    marginTop: 10,
+  },
+  linkText: {
+    color: C.brown,
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   errorBox: {
     marginTop: 14,
