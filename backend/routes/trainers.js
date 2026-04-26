@@ -157,4 +157,293 @@ router.post('/trainer-bookings', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// Trainer Trainings CRUD for trainer dashboard
+// Note: These routes intentionally do NOT require trainer_venues.
+// They only require trainer identity and available courts in system.
+// ---------------------------------------------------------
+
+// List all available courts with venue and sport info for trainer dropdowns.
+router.get('/trainer/courts', async (_req, res) => {
+  try {
+    const [rows] = await dbp.query(
+      `
+      SELECT
+        c.id AS court_id,
+        c.name AS court_name,
+        c.arena_id,
+        a.name AS arena_name,
+        MIN(ct.id) AS court_type_id,
+        GROUP_CONCAT(DISTINCT ct.type_name ORDER BY ct.type_name SEPARATOR ', ') AS sport_name
+      FROM courts c
+      JOIN arenas a ON a.id = c.arena_id
+      LEFT JOIN court_sports cs ON cs.court_id = c.id
+      LEFT JOIN court_types ct ON ct.id = cs.court_type_id
+      WHERE c.status = 'available'
+      GROUP BY c.id, c.name, c.arena_id, a.name
+      ORDER BY a.name ASC, c.name ASC, cs.id ASC
+      `,
+    );
+
+    return res.json(rows.map((r) => ({
+      courtId: r.court_id,
+      arenaId: r.arena_id,
+      courtName: r.court_name,
+      arenaName: r.arena_name,
+      courtTypeId: r.court_type_id,
+      sportName: r.sport_name,
+      label: `${r.arena_name} - ${r.court_name}${r.sport_name ? ` (${r.sport_name})` : ''}`,
+    })));
+  } catch (err) {
+    console.error('Error fetching trainer courts:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Get all trainings created by a trainer.
+router.get('/trainer/trainings', async (req, res) => {
+  const trainerId = req.query.trainerId || req.query.trainer_id;
+  if (!trainerId) {
+    return res.status(400).json({ error: 'trainerId is required' });
+  }
+
+  try {
+    const [rows] = await dbp.query(
+      `
+      SELECT
+        tts.id,
+        tts.trainer_id,
+        tts.court_id,
+        tts.price_per_person,
+        tts.start_time,
+        tts.end_time,
+        tts.recurring_pattern,
+        ct.type_name AS sport_name,
+        t.name AS coach_name,
+        a.name AS arena_name,
+        c.name AS court_name,
+        TIMESTAMPDIFF(MINUTE, tts.start_time, tts.end_time) AS duration_minutes
+      FROM trainer_time_slots tts
+      JOIN trainers t ON t.id = tts.trainer_id
+      JOIN arenas a ON a.id = tts.arena_id
+      JOIN courts c ON c.id = tts.court_id
+      LEFT JOIN court_types ct ON ct.id = tts.court_type_id
+      WHERE tts.trainer_id = ?
+      ORDER BY tts.id DESC
+      `,
+      [trainerId],
+    );
+
+    const trainings = rows.map((r) => ({
+      id: String(r.id),
+      trainerId: r.trainer_id,
+      courtId: r.court_id,
+      courtLabel: `${r.arena_name} - ${r.court_name}${r.sport_name ? ` (${r.sport_name})` : ''}`,
+      title: r.recurring_pattern || `${r.sport_name || 'Training'} Session`,
+      type: r.sport_name || 'Training',
+      coach: r.coach_name || 'Coach',
+      pricePerSession: String(r.price_per_person ?? ''),
+      duration: String(r.duration_minutes || 60),
+      description: '',
+      isAvailable: true,
+      thumbnail: null,
+      gallery: [],
+    }));
+
+    return res.json(trainings);
+  } catch (err) {
+    console.error('Error fetching trainer trainings:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Create a training for trainer dashboard.
+// Uses first available court in database to satisfy FK constraints.
+router.post('/trainer/trainings', async (req, res) => {
+  const trainerId = req.body.trainerId || req.body.trainer_id;
+  const {
+    title,
+    type,
+    courtId,
+    pricePerSession,
+    duration,
+  } = req.body;
+
+  if (!trainerId || !courtId || !pricePerSession) {
+    return res.status(400).json({ error: 'trainerId, courtId and pricePerSession are required' });
+  }
+
+  try {
+    // Use selected court from trainer form.
+    const [courtRows] = await dbp.query(
+      `
+      SELECT c.id AS court_id, c.arena_id, cs.court_type_id
+      FROM courts c
+      LEFT JOIN court_sports cs ON cs.court_id = c.id
+      WHERE c.id = ?
+      ORDER BY cs.id ASC
+      LIMIT 1
+      `,
+      [courtId],
+    );
+
+    if (!courtRows.length) {
+      return res.status(400).json({ error: 'No courts configured in system' });
+    }
+
+    let courtTypeId = courtRows[0].court_type_id || null;
+    if (type) {
+      const [typeRows] = await dbp.query(
+        'SELECT id FROM court_types WHERE LOWER(type_name) = LOWER(?) LIMIT 1',
+        [type],
+      );
+      if (typeRows.length) {
+        courtTypeId = typeRows[0].id;
+      }
+    }
+
+    if (!courtTypeId) {
+      return res.status(400).json({ error: 'Could not resolve sport type' });
+    }
+
+    const startTime = '09:00:00';
+    const durationMinutes = Math.max(1, Number(duration) || 60);
+    const endTotal = (9 * 60) + durationMinutes;
+    const endHour = String(Math.floor((endTotal % (24 * 60)) / 60)).padStart(2, '0');
+    const endMin = String(endTotal % 60).padStart(2, '0');
+    const endTime = `${endHour}:${endMin}:00`;
+
+    const [result] = await dbp.query(
+      `
+      INSERT INTO trainer_time_slots
+      (trainer_id, arena_id, court_id, court_type_id, session_date, start_time, end_time, capacity, price_per_person, is_recurring, recurring_pattern)
+      VALUES (?, ?, ?, ?, CURDATE(), ?, ?, 1, ?, 0, ?)
+      `,
+      [
+        trainerId,
+        courtRows[0].arena_id,
+        courtRows[0].court_id,
+        courtTypeId,
+        startTime,
+        endTime,
+        Number(pricePerSession),
+        (title || '').slice(0, 50) || null,
+      ],
+    );
+
+    return res.status(201).json({ message: 'Training created successfully', id: result.insertId });
+  } catch (err) {
+    console.error('Error creating trainer training:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Update training owned by trainer.
+router.put('/trainer/trainings/:trainingId', async (req, res) => {
+  const { trainingId } = req.params;
+  const trainerId = req.body.trainerId || req.body.trainer_id;
+  const { title, type, courtId, pricePerSession, duration } = req.body;
+
+  if (!trainerId || !pricePerSession) {
+    return res.status(400).json({ error: 'trainerId and pricePerSession are required' });
+  }
+
+  try {
+    const [existingRows] = await dbp.query(
+      'SELECT id, arena_id, court_id, start_time, court_type_id FROM trainer_time_slots WHERE id = ? AND trainer_id = ? LIMIT 1',
+      [trainingId, trainerId],
+    );
+
+    if (!existingRows.length) {
+      return res.status(404).json({ error: 'Training not found for this trainer' });
+    }
+
+    const existing = existingRows[0];
+    let selectedCourtId = existing.court_id;
+    let selectedArenaId = existing.arena_id;
+    let courtTypeId = existing.court_type_id;
+
+    if (courtId) {
+      const [courtRows] = await dbp.query(
+        `
+        SELECT c.id AS court_id, c.arena_id, cs.court_type_id
+        FROM courts c
+        LEFT JOIN court_sports cs ON cs.court_id = c.id
+        WHERE c.id = ?
+        ORDER BY cs.id ASC
+        LIMIT 1
+        `,
+        [courtId],
+      );
+
+      if (!courtRows.length) {
+        return res.status(400).json({ error: 'Invalid courtId' });
+      }
+
+      selectedCourtId = courtRows[0].court_id;
+      selectedArenaId = courtRows[0].arena_id;
+      if (courtRows[0].court_type_id) {
+        courtTypeId = courtRows[0].court_type_id;
+      }
+    }
+
+    if (type) {
+      const [typeRows] = await dbp.query(
+        'SELECT id FROM court_types WHERE LOWER(type_name) = LOWER(?) LIMIT 1',
+        [type],
+      );
+      if (typeRows.length) {
+        courtTypeId = typeRows[0].id;
+      }
+    }
+
+    const [h = '09', m = '00'] = String(existing.start_time || '09:00:00').split(':');
+    const durationMinutes = Math.max(1, Number(duration) || 60);
+    const endTotal = (Number(h) * 60) + Number(m) + durationMinutes;
+    const endHour = String(Math.floor((endTotal % (24 * 60)) / 60)).padStart(2, '0');
+    const endMin = String(endTotal % 60).padStart(2, '0');
+    const endTime = `${endHour}:${endMin}:00`;
+
+    await dbp.query(
+      `
+      UPDATE trainer_time_slots
+      SET arena_id = ?, court_id = ?, court_type_id = ?, end_time = ?, price_per_person = ?, recurring_pattern = ?
+      WHERE id = ? AND trainer_id = ?
+      `,
+      [selectedArenaId, selectedCourtId, courtTypeId, endTime, Number(pricePerSession), (title || '').slice(0, 50) || null, trainingId, trainerId],
+    );
+
+    return res.json({ message: 'Training updated successfully' });
+  } catch (err) {
+    console.error('Error updating trainer training:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Delete training owned by trainer.
+router.delete('/trainer/trainings/:trainingId', async (req, res) => {
+  const { trainingId } = req.params;
+  const trainerId = req.query.trainerId || req.query.trainer_id || req.body?.trainerId || req.body?.trainer_id;
+
+  if (!trainerId) {
+    return res.status(400).json({ error: 'trainerId is required' });
+  }
+
+  try {
+    const [result] = await dbp.query(
+      'DELETE FROM trainer_time_slots WHERE id = ? AND trainer_id = ?',
+      [trainingId, trainerId],
+    );
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ error: 'Training not found for this trainer' });
+    }
+
+    return res.json({ message: 'Training deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting trainer training:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
 module.exports = router;
