@@ -56,17 +56,25 @@ export function ForgotPasswordScreen({ onBackToLogin }) {
   };
 
   const handleRequestReset = async () => {
-    setError('');
-    setSuccess('');
+  setError('');
+  setSuccess('');
 
-    const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setError('Please enter your account email.');
-      shakeError();
-      return;
-    }
+  const cleanEmail = email.trim();
+  if (!cleanEmail) {
+    setError('Please enter your account email.');
+    shakeError();
+    return;
+  }
 
-    setLoading(true);
+  // Add this block:
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(cleanEmail)) {
+    setError('Please enter a valid email address.');
+    shakeError();
+    return;
+  }
+
+  setLoading(true);
     try {
       const res = await fetch(endpoints.requestPasswordReset, {
         method: 'POST',

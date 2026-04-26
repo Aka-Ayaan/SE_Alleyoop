@@ -247,14 +247,27 @@ function AddVenueForm({ onBack, onSave, initialData = null, mode = 'add', ownerI
         if (mode === 'view') return;
 
         // Basic validation: all visible fields must have a value
-        const hasInvalidCourt = courts.some((court) => !court.name.trim() || court.sports.length === 0);
-        if (!name.trim() || !location.trim() || hasInvalidCourt || courts.length === 0 || !thumbnail || gallery.length === 0) {
+        if (!name.trim() || !location.trim() || hasInvalidCourts || courts.length === 0 || !thumbnail || gallery.length === 0) {
             setError('Please fill all fields. Each court needs a name and at least one sport.');
             shakeError();
             return;
         }
 
         setError('');
+
+        if (/\d/.test(name.trim())) {
+            setError('Venue name cannot contain numbers.');
+            shakeError();
+            return;
+        }
+
+        // Court names: no numbers
+        const hasNumericCourtName = courts.some((court) => /\d/.test(court.name.trim()));
+        if (hasNumericCourtName) {
+            setError('Court names cannot contain numbers.');
+            shakeError();
+            return;
+        }
 
         let payloadCourts = courts.map((court) => ({
             id: court.id ?? undefined,

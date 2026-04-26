@@ -225,6 +225,20 @@ function AddProductForm({ onBack, onSave, initialData = null, mode = 'add', sell
             return;
         }
 
+        // Name: no numbers
+        if (/\d/.test(name.trim())) {
+            setError('Product name cannot contain numbers.');
+            shakeError();
+            return;
+        }
+
+        // Price: must be a valid positive number
+        if (isNaN(Number(price)) || Number(price) <= 0) {
+            setError('Please enter a valid price.');
+            shakeError();
+            return;
+        }
+
         setError('');
         setLoading(true);
 

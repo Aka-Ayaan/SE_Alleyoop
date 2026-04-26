@@ -83,33 +83,46 @@ export function LoginScreen({ onSwitchToSignup, onLoginSuccess, onOpenResendVeri
   };
 
   const handleLogin = async () => {
-    setError('');
-    if (!email || !password) {
-      setError('Please enter your email and password.');
+  setError('');
+
+  // 1. Check for empty fields
+  if (!email || !password) {
+    setError('Please enter your email and password.');
+    shakeError();
+    return;
+  }
+
+  // 2. Regex check for Email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    setError('Please enter a valid email address.');
+    shakeError();
+    return;
+  }
+
+  // 3. Proceed with API call
+  setLoading(true);
+  try {
+    const params = new URLSearchParams({ email, password, userType });
+    const res = await fetch(`${endpoints.login}?${params.toString()}`);
+    const data = await res.json();
+    
+    if (!res.ok || !data.authenticated) {
+      setError(data.error || 'Login failed.');
       shakeError();
-      return;
-    }
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ email, password, userType });
-      const res = await fetch(`${endpoints.login}?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok || !data.authenticated) {
-        setError(data.error || 'Login failed.');
-        shakeError();
-      } else {
-        if (onLoginSuccess) {
-          onLoginSuccess({ userId: data.userId, email: data.email, name: data.name, userType });
-        }
+    } else {
+      if (onLoginSuccess) {
+        onLoginSuccess({ userId: data.userId, email: data.email, name: data.name, userType });
       }
-    } catch (e) {
-      console.error('Login error', e);
-      setError('Something went wrong. Please try again.');
-      shakeError();
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (e) {
+    console.error('Login error', e);
+    setError('Something went wrong. Please try again.');
+    shakeError();
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
