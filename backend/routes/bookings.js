@@ -142,7 +142,7 @@ router.post("/bookings/:id/join", async (req, res) => {
 
     // 1. Check if the booking exists and is currently public (is_private = 0)
     const [bookingRows] = await dbp.query(
-      `SELECT participants_count, is_private FROM bookings WHERE id = ? FOR UPDATE`,
+      `SELECT player_id, participants_count, is_private FROM bookings WHERE id = ? FOR UPDATE`,
       [bookingId],
     );
 
@@ -153,7 +153,12 @@ router.post("/bookings/:id/join", async (req, res) => {
         .json({ error: "Lobby not found or no longer public" });
     }
 
-    const { participants_count } = bookingRows[0];
+    const { player_id, participants_count } = bookingRows[0];
+
+    if (Number(player_id) === Number(userId)) {
+      await dbp.rollback();
+      return res.status(400).json({ error: "You cannot join your own match" });
+    }
 
     // 2. Prevent duplicate joins (user can't join the same game twice)
     const [duplicateCheck] = await dbp.query(
@@ -259,6 +264,45 @@ router.get("/bookings/owner", async (req, res) => {
   }
 });
 
+// Get all open public bookings for the lobby
+router.get("/bookings/lobby/open", async (req, res) => {
+  try {
+    const viewerUserId = req.query.userId ? Number(req.query.userId) : null;
+
+    const [results] = await dbp.query(`
+      SELECT 
+        b.id AS bookingId,
+        b.booking_date AS date,
+        b.start_time AS startTime,
+        b.end_time AS endTime,
+        b.participants_count AS max_participants,
+        b.player_id AS hostPlayerId,
+        a.name AS arenaName,
+        a.city,
+        c.name AS courtName,
+        ct.type_name AS sportName,
+        p.name AS hostName,
+        p.skill_level_id AS hostSkillLevel,
+        (SELECT COUNT(*) FROM booking_participants WHERE booking_id = b.id) AS current_players,
+        (SELECT COUNT(*) FROM booking_participants WHERE booking_id = b.id AND player_id = ?) AS joined_by_user
+      FROM bookings b
+      JOIN arenas a ON b.arena_id = a.id
+      JOIN courts c ON b.court_id = c.id
+      JOIN court_types ct ON b.court_type_id = ct.id
+      JOIN players p ON b.player_id = p.id
+      WHERE b.is_private = 0 -- Only display public bookings
+        AND b.status_id != 3 -- Exclude cancelled bookings
+      HAVING current_players < max_participants
+      ORDER BY b.booking_date, b.start_time
+    `, [viewerUserId]);
+
+    return res.json(results);
+  } catch (err) {
+    console.error("Error fetching lobby:", err);
+    return res.status(500).json({ error: "Database error" });
+  }
+});
+
 router.get("/bookings/:userId", async (req, res) => {
   const userId = req.params.userId;
 
@@ -320,41 +364,6 @@ router.get("/bookings/:id/participants", async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: "Database error" });
-  }
-});
-
-// Get all open public bookings for the lobby
-router.get("/bookings/lobby/open", async (req, res) => {
-  try {
-    const [results] = await dbp.query(`
-      SELECT 
-        b.id AS bookingId,
-        b.booking_date AS date,
-        b.start_time AS startTime,
-        b.end_time AS endTime,
-        b.participants_count AS max_participants,
-        a.name AS arenaName,
-        a.city,
-        c.name AS courtName,
-        ct.type_name AS sportName,
-        p.name AS hostName,
-        p.skill_level_id AS hostSkillLevel,
-        (SELECT COUNT(*) FROM booking_participants WHERE booking_id = b.id) AS current_players
-      FROM bookings b
-      JOIN arenas a ON b.arena_id = a.id
-      JOIN courts c ON b.court_id = c.id
-      JOIN court_types ct ON b.court_type_id = ct.id
-      JOIN players p ON b.player_id = p.id
-      WHERE b.is_private = 0 -- Only display public bookings
-        AND b.status_id != 3 -- Exclude cancelled bookings
-      HAVING current_players < max_participants
-      ORDER BY b.booking_date, b.start_time
-    `);
-
-    return res.json(results);
-  } catch (err) {
-    console.error("Error fetching lobby:", err);
-    return res.status(500).json({ error: "Database error" });
   }
 });
 

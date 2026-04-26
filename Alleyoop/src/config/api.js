@@ -7,8 +7,11 @@ export const endpoints = {
   requestPasswordReset: `${API_BASE_URL}/auth/request-password-reset`,
   verify: `${API_BASE_URL}/auth/verify`,
   verifyMobile: `${API_BASE_URL}/auth/verify-mobile`,
-  
-  Arenas: `${API_BASE_URL}/arenas`,
-  
-
+  arenasList: `${API_BASE_URL}/arena/get`,
+  arenaDetails: (arenaId) => `${API_BASE_URL}/arena/get/${arenaId}`,
+  courtTypes: `${API_BASE_URL}/court-types`,
+  createBooking: `${API_BASE_URL}/bookings`,
+  playerBookings: (userId) => `${API_BASE_URL}/bookings/${userId}`,
+  publicBookingsLobby: `${API_BASE_URL}/bookings/lobby/open`,
+  joinPublicBooking: (bookingId) => `${API_BASE_URL}/bookings/${bookingId}/join`,
 };

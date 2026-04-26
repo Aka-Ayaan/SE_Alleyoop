@@ -54,6 +54,8 @@ router.post("/matchmaking/requests", async (req, res) => {
         start_time,
         end_time,
         preferred_match_size || 2,
+        min_skill_level_id || null,
+        max_skill_level_id || null,
       ],
     );
     const requestId = reqResult.insertId;

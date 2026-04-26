@@ -861,7 +861,7 @@
 
 // export default HomeScreen;
 
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -878,9 +878,12 @@ import {
   TextInput,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { API_BASE_URL, endpoints } from '../../config/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width, height } = Dimensions.get('window');
 
@@ -902,9 +905,49 @@ const TABS = [
   { id: 'venue', label: 'Venues', icon: 'stadium-outline', activeIcon: 'stadium' },
   { id: 'shopping', label: 'Shop', icon: 'shopping-outline', activeIcon: 'shopping' },
   { id: 'training', label: 'Training', icon: 'clipboard-text-outline', activeIcon: 'clipboard-text' },
-  { id: 'matchmaking', label: 'Match', icon: 'account-group-outline', activeIcon: 'account-group' },
+  { id: 'bookings', label: 'Bookings', icon: 'calendar-check-outline', activeIcon: 'calendar-check' },
   { id: 'profile', label: 'Profile', icon: 'account-circle-outline', activeIcon: 'account-circle' },
 ];
+
+const SKILL_LEVEL_LABELS = {
+  1: 'Beginner',
+  2: 'Intermediate',
+  3: 'Advanced',
+  4: 'Professional',
+};
+
+const normalizeImageUrl = (imagePath) => {
+  if (!imagePath) return null;
+  if (String(imagePath).startsWith('http')) return imagePath;
+  return `${API_BASE_URL}${String(imagePath).startsWith('/') ? '' : '/'}${imagePath}`;
+};
+
+const toDisplayDate = (isoDate) => {
+  if (!isoDate) return '';
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return String(isoDate);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const toDisplayTime = (timeStr) => {
+  if (!timeStr) return '';
+  const [h = '00', m = '00'] = String(timeStr).split(':');
+  const hour = Number(h);
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const normalizedHour = ((hour + 11) % 12) + 1;
+  return `${normalizedHour}:${m} ${suffix}`;
+};
+
+const addHoursToDbTime = (startTime, hoursToAdd) => {
+  const [h = '0', m = '0', s = '0'] = String(startTime).split(':');
+  const date = new Date();
+  date.setHours(Number(h), Number(m), Number(s), 0);
+  date.setHours(date.getHours() + Number(hoursToAdd || 1));
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+};
 
 // ─── Placeholder data ────────────────────────────────────────────────────────
 
@@ -1160,10 +1203,11 @@ const FilterGroup = ({ options, current, setter, dark = true }) => (
 
 function PostCard({ post, onPress }) {
   const { name, image, rating, timings, location, sports, isAvailable } = post.user;
+  const imageSource = typeof image === 'string' ? { uri: image } : image;
   return (
     <TouchableOpacity style={styles.venueCard} activeOpacity={0.92} onPress={onPress}>
       <View style={styles.cardImageContainer}>
-        <Image source={image} style={styles.venueImage} resizeMode="cover" />
+        <Image source={imageSource} style={styles.venueImage} resizeMode="cover" />
         <View style={styles.ratingBadge}>
           <MaterialCommunityIcons name="star" size={14} color="#FFD700" />
           <Text style={styles.ratingText}>{rating}</Text>
@@ -1199,38 +1243,134 @@ function PostCard({ post, onPress }) {
 
 // ─── Detail Screens ───────────────────────────────────────────────────────────
 
-function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
+function VenueDetailScreen({ data, onBack, onBookingCreated, user, courtTypeIdByName }) {
   const v = data.user;
-  const [date, setDate] = useState('');
+  const [bookingDate, setBookingDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [timeSlot, setTimeSlot] = useState('');
   const [duration, setDuration] = useState('1');
   const [isPublic, setIsPublic] = useState(false);
-  const [sport, setSport] = useState(v.sports[0] || '');
+  const [sport, setSport] = useState(v.sports?.[0] || '');
+  const [selectedCourtId, setSelectedCourtId] = useState('');
   const [players, setPlayers] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const timeSlots = ['7:00 AM', '9:00 AM', '11:00 AM', '2:00 PM', '4:00 PM', '6:00 PM', '8:00 PM'];
+  const timeSlots = [
+    { label: '7:00 AM', value: '07:00:00' },
+    { label: '9:00 AM', value: '09:00:00' },
+    { label: '11:00 AM', value: '11:00:00' },
+    { label: '2:00 PM', value: '14:00:00' },
+    { label: '4:00 PM', value: '16:00:00' },
+    { label: '6:00 PM', value: '18:00:00' },
+    { label: '8:00 PM', value: '20:00:00' },
+  ];
 
-  const handleBook = () => {
-    if (!date || !timeSlot) {
+  const availableCourtsForSport = useMemo(() => {
+    if (!Array.isArray(v.courtsData) || !sport) return [];
+    return v.courtsData.filter(
+      (court) => court.status === 'available' && Array.isArray(court.sports) && court.sports.includes(sport),
+    );
+  }, [v.courtsData, sport]);
+
+  useEffect(() => {
+    if (availableCourtsForSport.length > 0) {
+      setSelectedCourtId(String(availableCourtsForSport[0].id));
+    } else {
+      setSelectedCourtId('');
+    }
+  }, [availableCourtsForSport]);
+
+  const selectedDateString = useMemo(() => {
+    const y = bookingDate.getFullYear();
+    const m = String(bookingDate.getMonth() + 1).padStart(2, '0');
+    const d = String(bookingDate.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [bookingDate]);
+
+  const selectedDateLabel = useMemo(() => {
+    return bookingDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }, [bookingDate]);
+
+  const onDateChange = (_, selected) => {
+    setShowDatePicker(false);
+    if (selected) {
+      setBookingDate(selected);
+    }
+  };
+
+  const handleBook = async () => {
+    if (!selectedDateString || !timeSlot) {
       Alert.alert('Incomplete', 'Please fill in the date and time slot.');
       return;
     }
-    if (isPublic && onAddPublicBooking) {
-      onAddPublicBooking({
-        id: 'pb_' + Date.now(),
-        venue: v.name,
-        sport,
-        date,
-        time: timeSlot + ` (${duration}h)`,
-        location: v.location,
-        organizer: 'You',
-        spotsTotal: parseInt(players) || 10,
-        spotsFilled: 1,
-        level: 'All Levels',
-      });
+
+    const [hh = '00', mm = '00', ss = '00'] = String(timeSlot).split(':');
+    const bookingStart = new Date(bookingDate);
+    bookingStart.setHours(Number(hh), Number(mm), Number(ss), 0);
+    if (bookingStart.getTime() <= Date.now()) {
+      Alert.alert('Invalid booking time', 'Please choose a future date and time.');
+      return;
     }
-    setSubmitted(true);
+
+    if (!user?.userId) {
+      Alert.alert('Not logged in', 'Please log in again and try booking.');
+      return;
+    }
+
+    if (!sport) {
+      Alert.alert('Missing sport', 'Please select a sport.');
+      return;
+    }
+
+    const courtTypeId = courtTypeIdByName[String(sport).toLowerCase()];
+    if (!courtTypeId) {
+      Alert.alert('Sport unavailable', 'Selected sport is not configured in backend court types.');
+      return;
+    }
+
+    const selectedCourt = availableCourtsForSport.find((c) => String(c.id) === String(selectedCourtId));
+    if (!selectedCourt) {
+      Alert.alert('No court available', 'No available court matches the selected sport right now.');
+      return;
+    }
+
+    const endTime = addHoursToDbTime(timeSlot, Number(duration || 1));
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(endpoints.createBooking, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.userId,
+          courtId: selectedCourt.id,
+          courtTypeId,
+          date: selectedDateString,
+          startTime: timeSlot,
+          endTime,
+          is_private: !isPublic,
+          status: 'confirmed',
+          participantsCount: isPublic ? (parseInt(players, 10) || 10) : 1,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        Alert.alert('Booking failed', payload.error || 'Could not create booking.');
+        return;
+      }
+
+      if (onBookingCreated) {
+        onBookingCreated();
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      Alert.alert('Booking failed', 'Could not reach server. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -1243,7 +1383,7 @@ function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
             </View>
             <Text style={styles.successTitle}>Booking Confirmed!</Text>
             <Text style={styles.successSubtitle}>{v.name}</Text>
-            <Text style={styles.successMeta}>{date} · {timeSlot} · {duration}h</Text>
+            <Text style={styles.successMeta}>{selectedDateString} · {toDisplayTime(timeSlot)} · {duration}h</Text>
             {isPublic && (
               <View style={styles.publicBadge}>
                 <MaterialCommunityIcons name="earth" size={14} color={C.blue} />
@@ -1264,7 +1404,7 @@ function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
       <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={styles.detailHero}>
-          <Image source={v.image} style={styles.detailHeroImage} resizeMode="cover" />
+          <Image source={typeof v.image === 'string' ? { uri: v.image } : v.image} style={styles.detailHeroImage} resizeMode="cover" />
           <View style={styles.detailHeroOverlay} />
           <View style={styles.detailHeroContent}>
             <View style={styles.ratingBadgeLg}>
@@ -1308,7 +1448,7 @@ function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sports Available</Text>
           <View style={styles.tagsRow}>
-            {v.sports.map((s, i) => (
+            {(v.sports || []).map((s, i) => (
               <View key={i} style={styles.sportTagLg}>
                 <Text style={styles.sportTagLgText}>{s}</Text>
               </View>
@@ -1336,7 +1476,7 @@ function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
           <Text style={styles.inputLabel}>Select Sport</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
             <View style={styles.tagsRow}>
-              {v.sports.map((s, i) => (
+              {(v.sports || []).map((s, i) => (
                 <TouchableOpacity
                   key={i}
                   onPress={() => setSport(s)}
@@ -1348,25 +1488,58 @@ function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
             </View>
           </ScrollView>
 
+          {Array.isArray(v.courtsData) && v.courtsData.length > 0 && (
+            <>
+              <Text style={styles.inputLabel}>Select Court</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={styles.tagsRow}>
+                  {availableCourtsForSport.map((court) => (
+                    <TouchableOpacity
+                      key={court.id}
+                      onPress={() => setSelectedCourtId(String(court.id))}
+                      style={[styles.selectChip, String(court.id) === selectedCourtId && styles.selectChipActive]}
+                    >
+                      <Text style={[styles.selectChipText, String(court.id) === selectedCourtId && styles.selectChipTextActive]}>
+                        {court.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
+
           <Text style={styles.inputLabel}>Date</Text>
-          <TextInput
+          <TouchableOpacity
             style={styles.textInput}
-            placeholder="e.g. Sat, May 3"
-            placeholderTextColor={C.mutedText}
-            value={date}
-            onChangeText={setDate}
-          />
+            onPress={() => setShowDatePicker(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.datePickerRow}>
+              <MaterialCommunityIcons name="calendar-month-outline" size={18} color={C.orange} />
+              <Text style={styles.datePickerText}>{selectedDateLabel}</Text>
+            </View>
+          </TouchableOpacity>
+          {showDatePicker ? (
+            <DateTimePicker
+              value={bookingDate}
+              mode="date"
+              display="default"
+              minimumDate={new Date()}
+              onChange={onDateChange}
+            />
+          ) : null}
 
           <Text style={styles.inputLabel}>Time Slot</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {timeSlots.map((t) => (
                 <TouchableOpacity
-                  key={t}
-                  onPress={() => setTimeSlot(t)}
-                  style={[styles.selectChip, timeSlot === t && styles.selectChipActive]}
+                  key={t.value}
+                  onPress={() => setTimeSlot(t.value)}
+                  style={[styles.selectChip, timeSlot === t.value && styles.selectChipActive]}
                 >
-                  <Text style={[styles.selectChipText, timeSlot === t && styles.selectChipTextActive]}>{t}</Text>
+                  <Text style={[styles.selectChipText, timeSlot === t.value && styles.selectChipTextActive]}>{t.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1426,9 +1599,9 @@ function VenueDetailScreen({ data, onBack, onAddPublicBooking }) {
             </>
           )}
 
-          <TouchableOpacity style={[styles.primaryBtn, !v.isAvailable && styles.primaryBtnDisabled]} onPress={handleBook} disabled={!v.isAvailable}>
+          <TouchableOpacity style={[styles.primaryBtn, (!v.isAvailable || submitting) && styles.primaryBtnDisabled]} onPress={handleBook} disabled={!v.isAvailable || submitting}>
             <MaterialCommunityIcons name="calendar-check" size={18} color={C.white} />
-            <Text style={styles.primaryBtnText}>{v.isAvailable ? 'Confirm Booking' : 'Currently Unavailable'}</Text>
+            <Text style={styles.primaryBtnText}>{submitting ? 'Booking...' : (v.isAvailable ? 'Confirm Booking' : 'Currently Unavailable')}</Text>
           </TouchableOpacity>
 
           <View style={styles.contactRow}>
@@ -1744,9 +1917,19 @@ function ProfileSubScreen({ id, onBack }) {
   );
 }
 
-// ─── Matchmaking Screen ───────────────────────────────────────────────────────
+// ─── Bookings Screen ─────────────────────────────────────────────────────────
 
-function MatchmakingScreen({ publicBookings }) {
+function BookingsScreen({
+  publicBookings,
+  privateBookings,
+  publicBookingsLoading,
+  privateBookingsLoading,
+  onJoinBooking,
+  joiningBookingId,
+  currentUserId,
+}) {
+  const [bookingView, setBookingView] = useState('public');
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
   const [sportFilter, setSportFilter] = useState('All');
   const [venueFilter, setVenueFilter] = useState('All');
 
@@ -1772,94 +1955,243 @@ function MatchmakingScreen({ publicBookings }) {
 
   const levelColor = { Beginner: '#2FA4D7', Intermediate: C.orange, Advanced: '#C62828', 'All Levels': C.green };
 
+  const privateStatusColor = (status) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'confirmed') return C.green;
+    if (normalized === 'pending') return C.orange;
+    if (normalized === 'cancelled') return C.red;
+    return C.brown;
+  };
+
   return (
-    <View style={[styles.rootwhite, { flex: 1 }]}>
-      <View style={styles.matchmakingHeader}>
-        <Text style={styles.matchmakingHeading}>Find a Game</Text>
-        <Text style={styles.matchmakingSubheading}>Join public bookings near you</Text>
+    <View style={styles.rootbrown}>
+      <View style={styles.arcContainer} pointerEvents="none">
+        <View style={styles.arcOuter} />
+        <View style={styles.arcInner} />
+        <View style={styles.halfCircle} />
       </View>
 
-      {/* Filters */}
-      <View style={styles.filterSection}>
-        <Text style={styles.filterLabel}>Sport</Text>
-        <FilterGroup options={sports} current={sportFilter} setter={setSportFilter} dark={false} />
-        <Text style={[styles.filterLabel, { marginTop: 8 }]}>Venue</Text>
-        <FilterGroup options={venues} current={venueFilter} setter={setVenueFilter} dark={false} />
+      <View style={styles.bookingToggleRow}>
+        <TouchableOpacity
+          style={[styles.bookingToggleBtn, bookingView === 'public' && styles.bookingToggleBtnActive]}
+          onPress={() => {
+            setBookingView('public');
+            setFiltersCollapsed(true);
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.bookingToggleText, bookingView === 'public' && styles.bookingToggleTextActive]}>Public</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.bookingToggleBtn, bookingView === 'private' && styles.bookingToggleBtnActive]}
+          onPress={() => setBookingView('private')}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.bookingToggleText, bookingView === 'private' && styles.bookingToggleTextActive]}>Private</Text>
+        </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, paddingTop: 8 }}
-        renderItem={({ item }) => {
-          const spots = item.spotsTotal - item.spotsFilled;
-          return (
+      {bookingView === 'public' ? (
+        <FlatList
+          data={filtered}
+          keyExtractor={item => String(item.id)}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, paddingTop: 8 }}
+          ListHeaderComponent={
+            <View>
+              <View style={styles.matchmakingHeader}>
+                <Text style={styles.matchmakingHeading}>Bookings</Text>
+                <Text style={styles.matchmakingSubheading}>Manage your own bookings or join public games</Text>
+              </View>
+              <View style={styles.filterSection}>
+                <TouchableOpacity
+                  style={styles.filterCollapseBtn}
+                  onPress={() => setFiltersCollapsed((prev) => !prev)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.filterCollapseText}>Filters</Text>
+                  <MaterialCommunityIcons
+                    name={filtersCollapsed ? 'chevron-down' : 'chevron-up'}
+                    size={18}
+                    color={C.cream + 'DD'}
+                  />
+                </TouchableOpacity>
+
+                {!filtersCollapsed ? (
+                  <>
+                    <Text style={styles.filterLabel}>Sport</Text>
+                    <FilterGroup options={sports} current={sportFilter} setter={setSportFilter} />
+                    <Text style={[styles.filterLabel, { marginTop: 8 }]}>Venue</Text>
+                    <FilterGroup options={venues} current={venueFilter} setter={setVenueFilter} />
+                  </>
+                ) : null}
+              </View>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const spots = item.spotsTotal - item.spotsFilled;
+            const isOwnMatch = Number(item.hostPlayerId) === Number(currentUserId);
+            const isAlreadyJoined = Boolean(item.isJoined);
+            return (
+              <View style={styles.matchCard}>
+                <View style={styles.matchCardTop}>
+                  <View style={styles.matchSportBadge}>
+                    <Text style={styles.matchSportText}>{item.sport}</Text>
+                  </View>
+                  <View style={[styles.levelBadge, { backgroundColor: (levelColor[item.level] || C.orange) + '22' }]}>
+                    <Text style={[styles.levelText, { color: levelColor[item.level] || C.orange }]}>{item.level}</Text>
+                  </View>
+                </View>
+                <Text style={styles.matchVenueName}>{item.venue}</Text>
+                <View style={styles.matchInfoRow}>
+                  <MaterialCommunityIcons name="calendar-outline" size={15} color={C.orange} />
+                  <Text style={styles.matchInfoText}>{item.date}</Text>
+                  <MaterialCommunityIcons name="clock-outline" size={15} color={C.orange} style={{ marginLeft: 8 }} />
+                  <Text style={styles.matchInfoText}>{item.time}</Text>
+                </View>
+                <View style={styles.matchInfoRow}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={15} color={C.orange} />
+                  <Text style={styles.matchInfoText}>{item.location}</Text>
+                </View>
+                <View style={styles.matchInfoRow}>
+                  <MaterialCommunityIcons name="account-outline" size={15} color={C.orange} />
+                  <Text style={styles.matchInfoText}>Organised by {item.organizer}</Text>
+                </View>
+                {(isOwnMatch || isAlreadyJoined) ? (
+                  <View style={styles.matchStatusBadgeRow}>
+                    {isOwnMatch ? (
+                      <View style={[styles.matchStatusBadge, styles.matchStatusBadgeOwn]}>
+                        <MaterialCommunityIcons name="account-check-outline" size={13} color={C.blue} />
+                        <Text style={[styles.matchStatusBadgeText, styles.matchStatusBadgeTextOwn]}>Created by you</Text>
+                      </View>
+                    ) : null}
+                    {isAlreadyJoined ? (
+                      <View style={[styles.matchStatusBadge, styles.matchStatusBadgeJoined]}>
+                        <MaterialCommunityIcons name="check-decagram-outline" size={13} color={C.green} />
+                        <Text style={[styles.matchStatusBadgeText, styles.matchStatusBadgeTextJoined]}>Already joined</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                <View style={styles.spotsRow}>
+                  <Text style={styles.spotsText}>{item.spotsFilled}/{item.spotsTotal} joined</Text>
+                  <Text style={[styles.spotsLeft, { color: spots > 0 ? C.green : C.red }]}>
+                    {spots > 0 ? `${spots} spot${spots > 1 ? 's' : ''} left` : 'Full'}
+                  </Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, {
+                    width: `${(item.spotsFilled / item.spotsTotal) * 100}%`,
+                    backgroundColor: spots > 2 ? C.green : spots > 0 ? C.orange : C.red,
+                  }]} />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.joinBtn, (spots <= 0 || joiningBookingId === item.id || isOwnMatch || isAlreadyJoined) && styles.joinBtnDisabled]}
+                  disabled={spots <= 0 || joiningBookingId === item.id || isOwnMatch || isAlreadyJoined}
+                  onPress={() => onJoinBooking && onJoinBooking(item)}
+                >
+                  <MaterialCommunityIcons name={spots > 0 ? 'account-plus' : 'account-off'} size={16} color={C.white} />
+                  <Text style={styles.joinBtnText}>
+                    {isOwnMatch
+                      ? 'Your Match'
+                      : (isAlreadyJoined
+                          ? 'Already Joined'
+                          : (joiningBookingId === item.id ? 'Joining...' : (spots > 0 ? 'Join Match' : 'Game Full')))}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyMatchState}>
+              {publicBookingsLoading ? (
+                <>
+                  <ActivityIndicator size="large" color={C.orange} />
+                  <Text style={styles.emptyMatchSub}>Loading public games...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="account-group-outline" size={60} color={C.orange + '44'} />
+                  <Text style={styles.emptyMatchTitle}>No public games found</Text>
+                  <Text style={styles.emptyMatchSub}>Adjust filters or book a venue publicly</Text>
+                </>
+              )}
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={privateBookings}
+          keyExtractor={(item) => String(item.id)}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, paddingTop: 8 }}
+          ListHeaderComponent={
+            <View style={styles.matchmakingHeader}>
+              <Text style={styles.matchmakingHeading}>Bookings</Text>
+              <Text style={styles.matchmakingSubheading}>Manage your own bookings or join public games</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
             <View style={styles.matchCard}>
               <View style={styles.matchCardTop}>
                 <View style={styles.matchSportBadge}>
-                  <Text style={styles.matchSportText}>{item.sport}</Text>
+                  <Text style={styles.matchSportText}>{item.sportName}</Text>
                 </View>
-                <View style={[styles.levelBadge, { backgroundColor: (levelColor[item.level] || C.orange) + '22' }]}>
-                  <Text style={[styles.levelText, { color: levelColor[item.level] || C.orange }]}>{item.level}</Text>
+                <View style={[styles.levelBadge, { backgroundColor: privateStatusColor(item.status) + '22' }] }>
+                  <Text style={[styles.levelText, { color: privateStatusColor(item.status) }]}>{item.status}</Text>
                 </View>
               </View>
-              <Text style={styles.matchVenueName}>{item.venue}</Text>
-              <View style={styles.matchInfoRow}>
-                <MaterialCommunityIcons name="calendar-outline" size={15} color={C.orange} />
-                <Text style={styles.matchInfoText}>{item.date}</Text>
-                <MaterialCommunityIcons name="clock-outline" size={15} color={C.orange} style={{ marginLeft: 8 }} />
-                <Text style={styles.matchInfoText}>{item.time}</Text>
-              </View>
+
+              <Text style={styles.matchVenueName}>{item.arenaName}</Text>
               <View style={styles.matchInfoRow}>
                 <MaterialCommunityIcons name="map-marker-outline" size={15} color={C.orange} />
-                <Text style={styles.matchInfoText}>{item.location}</Text>
+                <Text style={styles.matchInfoText}>{item.courtName}</Text>
               </View>
               <View style={styles.matchInfoRow}>
-                <MaterialCommunityIcons name="account-outline" size={15} color={C.orange} />
-                <Text style={styles.matchInfoText}>Organised by {item.organizer}</Text>
+                <MaterialCommunityIcons name="calendar-outline" size={15} color={C.orange} />
+                <Text style={styles.matchInfoText}>{item.bookingDateDisplay}</Text>
+                <MaterialCommunityIcons name="clock-outline" size={15} color={C.orange} style={{ marginLeft: 8 }} />
+                <Text style={styles.matchInfoText}>{item.startTimeDisplay}</Text>
               </View>
-
-              {/* Spots progress */}
-              <View style={styles.spotsRow}>
-                <Text style={styles.spotsText}>{item.spotsFilled}/{item.spotsTotal} joined</Text>
-                <Text style={[styles.spotsLeft, { color: spots > 0 ? C.green : C.red }]}>
-                  {spots > 0 ? `${spots} spot${spots > 1 ? 's' : ''} left` : 'Full'}
-                </Text>
+              <View style={styles.matchInfoRow}>
+                <MaterialCommunityIcons name="timer-outline" size={15} color={C.orange} />
+                <Text style={styles.matchInfoText}>{item.durationHours} hour(s)</Text>
               </View>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, {
-                  width: `${(item.spotsFilled / item.spotsTotal) * 100}%`,
-                  backgroundColor: spots > 2 ? C.green : spots > 0 ? C.orange : C.red,
-                }]} />
+              <View style={styles.matchStatusBadgeRow}>
+                <View style={[styles.matchStatusBadge, styles.matchStatusBadgeOwn]}>
+                  <MaterialCommunityIcons name="lock-outline" size={13} color={C.blue} />
+                  <Text style={[styles.matchStatusBadgeText, styles.matchStatusBadgeTextOwn]}>Private booking</Text>
+                </View>
               </View>
-
-              <TouchableOpacity
-                style={[styles.joinBtn, spots <= 0 && styles.joinBtnDisabled]}
-                disabled={spots <= 0}
-                onPress={() => Alert.alert('Request Sent', `You've requested to join ${item.organizer}'s game at ${item.venue}.`)}
-              >
-                <MaterialCommunityIcons name={spots > 0 ? 'account-plus' : 'account-off'} size={16} color={C.white} />
-                <Text style={styles.joinBtnText}>{spots > 0 ? 'Request to Join' : 'Game Full'}</Text>
-              </TouchableOpacity>
             </View>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyMatchState}>
-            <MaterialCommunityIcons name="account-group-outline" size={60} color={C.orange + '44'} />
-            <Text style={styles.emptyMatchTitle}>No public games found</Text>
-            <Text style={styles.emptyMatchSub}>Adjust filters or book a venue publicly</Text>
-          </View>
-        }
-      />
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyMatchState}>
+              {privateBookingsLoading ? (
+                <>
+                  <ActivityIndicator size="large" color={C.orange} />
+                  <Text style={styles.emptyMatchSub}>Loading your private bookings...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="calendar-outline" size={60} color={C.orange + '44'} />
+                  <Text style={styles.emptyMatchTitle}>No private bookings yet</Text>
+                  <Text style={styles.emptyMatchSub}>Book a venue privately to see it here</Text>
+                </>
+              )}
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
 
 // ─── Tab Feed ─────────────────────────────────────────────────────────────────
 
-function FeedScreen({ posts, type, onSelect }) {
+function FeedScreen({ posts, type, onSelect, loading = false }) {
   const [filter, setFilter] = useState('All');
   const filterOptions = useMemo(() => {
     const categories = new Set(['All']);
@@ -1879,6 +2211,12 @@ function FeedScreen({ posts, type, onSelect }) {
         <View style={styles.arcInner} />
         <View style={styles.halfCircle} />
       </View>
+      {loading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={C.orange} />
+          <Text style={[styles.emptyStateText, { marginTop: 10 }]}>Loading...</Text>
+        </View>
+      ) : null}
       <FilterGroup options={filterOptions} current={filter} setter={setFilter} />
       <FlatList
         data={filteredData}
@@ -1978,7 +2316,14 @@ export function HomeScreen({ user, onLogout }) {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState(0);
   const [activeSubScreen, setActiveSubScreen] = useState(null);
-  const [publicBookings, setPublicBookings] = useState(initialPublicBookings);
+  const [venuePosts, setVenuePosts] = useState([]);
+  const [venuesLoading, setVenuesLoading] = useState(false);
+  const [publicBookings, setPublicBookings] = useState([]);
+  const [publicBookingsLoading, setPublicBookingsLoading] = useState(false);
+  const [privateBookings, setPrivateBookings] = useState([]);
+  const [privateBookingsLoading, setPrivateBookingsLoading] = useState(false);
+  const [joiningBookingId, setJoiningBookingId] = useState(null);
+  const [courtTypeIdByName, setCourtTypeIdByName] = useState({});
 
   const translateX = useRef(new Animated.Value(0)).current;
 
@@ -2003,16 +2348,225 @@ export function HomeScreen({ user, onLogout }) {
     })
   ).current;
 
-  const handleAddPublicBooking = useCallback((booking) => {
-    setPublicBookings(prev => [booking, ...prev]);
+  const loadCourtTypes = useCallback(async () => {
+    try {
+      const response = await fetch(endpoints.courtTypes);
+      const data = await response.json();
+      if (!response.ok) return;
+
+      const map = {};
+      (data || []).forEach((row) => {
+        if (row?.type_name) {
+          map[String(row.type_name).toLowerCase()] = row.id;
+        }
+      });
+      setCourtTypeIdByName(map);
+    } catch (err) {
+      console.error('Error fetching court types:', err);
+    }
   }, []);
+
+  const loadVenues = useCallback(async () => {
+    setVenuesLoading(true);
+    try {
+      const response = await fetch(endpoints.arenasList);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch arenas');
+      }
+
+      const mapped = (data || []).map((arena) => ({
+        id: String(arena.id),
+        user: {
+          arenaId: arena.id,
+          name: arena.name,
+          image: normalizeImageUrl(arena.image_path) || require('../../../assets/tennis.png'),
+          rating: arena.rating ? String(arena.rating) : '0.0',
+          timings: 'See details',
+          location: arena.location || 'Unknown',
+          sports: ['Multi-sport'],
+          isAvailable: arena.availability === 'available',
+          pricePerHour: Number(arena.pricePerHour) || null,
+          description: 'Tap to view full arena details.',
+          amenities: [],
+          courts: Number(arena.total_courts) || 0,
+          phone: 'N/A',
+          courtsData: [],
+        },
+      }));
+
+      setVenuePosts(mapped);
+    } catch (err) {
+      console.error('Error fetching venues:', err);
+      setVenuePosts([]);
+    } finally {
+      setVenuesLoading(false);
+    }
+  }, []);
+
+  const loadPublicBookings = useCallback(async () => {
+    setPublicBookingsLoading(true);
+    try {
+      const query = user?.userId ? `?userId=${encodeURIComponent(user.userId)}` : '';
+      const response = await fetch(`${endpoints.publicBookingsLobby}${query}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch public bookings');
+      }
+
+      const mapped = (data || []).map((booking) => ({
+        id: String(booking.bookingId),
+        bookingId: booking.bookingId,
+        hostPlayerId: booking.hostPlayerId,
+        isJoined: Number(booking.joined_by_user) > 0,
+        venue: booking.arenaName,
+        sport: booking.sportName,
+        date: toDisplayDate(booking.date),
+        time: `${toDisplayTime(booking.startTime)} - ${toDisplayTime(booking.endTime)}`,
+        location: booking.city,
+        organizer: booking.hostName,
+        spotsTotal: Number(booking.max_participants) || 0,
+        spotsFilled: Number(booking.current_players) || 0,
+        level: SKILL_LEVEL_LABELS[Number(booking.hostSkillLevel)] || 'All Levels',
+      }));
+
+      setPublicBookings(mapped);
+    } catch (err) {
+      console.error('Error fetching public bookings:', err);
+      setPublicBookings([]);
+    } finally {
+      setPublicBookingsLoading(false);
+    }
+  }, [user]);
+
+  const loadPrivateBookings = useCallback(async () => {
+    if (!user?.userId) {
+      setPrivateBookings([]);
+      return;
+    }
+
+    setPrivateBookingsLoading(true);
+    try {
+      const response = await fetch(endpoints.playerBookings(user.userId));
+      const data = await response.json();
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || data?.error || 'Failed to fetch private bookings');
+      }
+
+      const mapped = (data.bookings || []).map((booking) => ({
+        id: String(booking.bookingId),
+        bookingId: booking.bookingId,
+        arenaName: booking.arenaName,
+        courtName: booking.courtName,
+        sportName: booking.sportName,
+        bookingDateDisplay: toDisplayDate(booking.bookingDate),
+        startTimeDisplay: toDisplayTime(booking.startTime),
+        durationHours: Math.max(1, Math.round(Number(booking.duration || 60) / 60)),
+        status: booking.status || 'pending',
+      }));
+
+      setPrivateBookings(mapped);
+    } catch (err) {
+      console.error('Error fetching private bookings:', err);
+      setPrivateBookings([]);
+    } finally {
+      setPrivateBookingsLoading(false);
+    }
+  }, [user]);
+
+  const refreshBookingTabs = useCallback(() => {
+    loadPublicBookings();
+    loadPrivateBookings();
+  }, [loadPublicBookings, loadPrivateBookings]);
+
+  useEffect(() => {
+    loadCourtTypes();
+    loadVenues();
+    refreshBookingTabs();
+  }, [loadCourtTypes, loadVenues, refreshBookingTabs]);
+
+  const openVenueDetails = useCallback(async (item) => {
+    try {
+      const response = await fetch(endpoints.arenaDetails(item.user.arenaId));
+      const details = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Unable to open venue', details.error || 'Could not load arena details.');
+        return;
+      }
+
+      const enriched = {
+        ...item,
+        user: {
+          ...item.user,
+          name: details.name,
+          image: details.images?.length ? normalizeImageUrl(details.images[0]) : item.user.image,
+          rating: details.rating ? String(details.rating) : item.user.rating,
+          timings: details.timing || 'See details',
+          location: `${details.city || ''}${details.city && details.address ? ', ' : ''}${details.address || ''}`,
+          sports: Array.isArray(details.sports) ? details.sports : item.user.sports,
+          isAvailable: details.availability === 'available',
+          pricePerHour: Number(details.pricePerHour) || item.user.pricePerHour,
+          description: details.description || item.user.description,
+          amenities: Array.isArray(details.amenities) ? details.amenities : [],
+          courts: Number(details.total_courts) || item.user.courts,
+          phone: 'N/A',
+          courtsData: Array.isArray(details.courts) ? details.courts : [],
+        },
+      };
+
+      setActiveSubScreen({ type: 'venue', data: enriched, id: enriched.id });
+    } catch (err) {
+      Alert.alert('Unable to open venue', 'Could not reach server. Please try again.');
+    }
+  }, []);
+
+  const joinPublicBooking = useCallback(async (booking) => {
+    if (!user?.userId) {
+      Alert.alert('Not logged in', 'Please log in again and try joining.');
+      return;
+    }
+
+    setJoiningBookingId(booking.id);
+    try {
+      const response = await fetch(endpoints.joinPublicBooking(booking.bookingId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.userId }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Could not join', data.error || data.message || 'Join request failed.');
+        return;
+      }
+
+      Alert.alert('Joined', data.message || 'Successfully joined the match.');
+      loadPublicBookings();
+    } catch (err) {
+      Alert.alert('Could not join', 'Could not reach server. Please try again.');
+    } finally {
+      setJoiningBookingId(null);
+    }
+  }, [user, loadPublicBookings]);
 
   const renderSubScreen = () => {
     if (!activeSubScreen) return null;
     const { type, data, id } = activeSubScreen;
     const back = () => setActiveSubScreen(null);
 
-    if (type === 'venue') return <VenueDetailScreen data={data} onBack={back} onAddPublicBooking={handleAddPublicBooking} />;
+    if (type === 'venue') {
+      return (
+        <VenueDetailScreen
+          data={data}
+          onBack={back}
+          onBookingCreated={refreshBookingTabs}
+          user={user}
+          courtTypeIdByName={courtTypeIdByName}
+        />
+      );
+    }
     if (type === 'shop') return <ProductDetailScreen data={data} onBack={back} />;
     if (type === 'training') return <TrainingDetailScreen data={data} onBack={back} />;
     if (type === 'profile') return <ProfileSubScreen id={id} onBack={back} />;
@@ -2068,9 +2622,10 @@ export function HomeScreen({ user, onLogout }) {
               {/* Venues */}
               <View style={styles.tabPane}>
                 <FeedScreen
-                  posts={VENUE_POSTS}
+                  posts={venuePosts}
                   type="venue"
-                  onSelect={(item) => setActiveSubScreen({ type: 'venue', data: item, id: item.id })}
+                  loading={venuesLoading}
+                  onSelect={openVenueDetails}
                 />
               </View>
               {/* Shop */}
@@ -2091,7 +2646,15 @@ export function HomeScreen({ user, onLogout }) {
               </View>
               {/* Matchmaking */}
               <View style={styles.tabPane}>
-                <MatchmakingScreen publicBookings={publicBookings} />
+                <BookingsScreen
+                  publicBookings={publicBookings}
+                  privateBookings={privateBookings}
+                  publicBookingsLoading={publicBookingsLoading}
+                  privateBookingsLoading={privateBookingsLoading}
+                  onJoinBooking={joinPublicBooking}
+                  joiningBookingId={joiningBookingId}
+                  currentUserId={user?.userId}
+                />
               </View>
               {/* Profile */}
               <View style={styles.tabPane}>
@@ -2513,6 +3076,16 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: C.white,
   },
+  datePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  datePickerText: {
+    color: C.brown,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   selectChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -2800,30 +3373,71 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 12,
-    backgroundColor: C.white,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    backgroundColor: 'transparent',
   },
   matchmakingHeading: {
     fontSize: 22,
     fontWeight: '900',
-    color: C.brown,
+    color: C.cream,
   },
   matchmakingSubheading: {
     fontSize: 13,
-    color: C.mutedText,
+    color: C.cream + 'CC',
     marginTop: 2,
   },
   filterSection: {
-    backgroundColor: C.white,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    paddingVertical: 10,
+    backgroundColor: 'transparent',
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  bookingToggleRow: {
+    marginHorizontal: 12,
+    marginBottom: 4,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    padding: 3,
+  },
+  bookingToggleBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+    paddingVertical: 6,
+  },
+  bookingToggleBtnActive: {
+    backgroundColor: C.orange,
+  },
+  bookingToggleText: {
+    color: C.cream + 'CC',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  bookingToggleTextActive: {
+    color: C.white,
+  },
+  filterCollapseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filterCollapseText: {
+    color: C.cream + 'DD',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   filterLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: C.mutedText,
+    color: C.cream + 'CC',
     paddingHorizontal: 16,
     marginBottom: 6,
     textTransform: 'uppercase',
@@ -2836,8 +3450,8 @@ const styles = StyleSheet.create({
     padding: 16,
     elevation: 3,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     borderWidth: 1,
     borderColor: C.border,
@@ -2882,6 +3496,39 @@ const styles = StyleSheet.create({
   matchInfoText: {
     fontSize: 13,
     color: C.mutedText,
+  },
+  matchStatusBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  matchStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  matchStatusBadgeOwn: {
+    backgroundColor: '#E9F5FE',
+    borderColor: '#B9E1F6',
+  },
+  matchStatusBadgeJoined: {
+    backgroundColor: '#EAF7EE',
+    borderColor: '#BFE6CD',
+  },
+  matchStatusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  matchStatusBadgeTextOwn: {
+    color: C.blue,
+  },
+  matchStatusBadgeTextJoined: {
+    color: C.green,
   },
   spotsRow: {
     flexDirection: 'row',

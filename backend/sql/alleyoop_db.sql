@@ -640,7 +640,7 @@ VALUES
 	1,
 	2,
 	4, -- Futsal
-	'2025-12-05',
+	'2026-12-05',
 	'18:00:00',
 	'19:00:00',
 	2, -- confirmed
@@ -652,19 +652,19 @@ VALUES
 	1,
 	1,
 	6, -- Basketball
-	'2025-12-06',
+	'2026-12-06',
 	'20:00:00',
 	'21:30:00',
-	1, -- pending
-	1, -- private booking
-	4
+	2, -- confirmed
+	0, -- public booking
+	10
 ),
 (
 	1,
 	2,
 	5,
 	4, -- Futsal
-	'2025-12-07',
+	'2026-12-07',
 	'17:00:00',
 	'18:30:00',
 	2, -- confirmed
@@ -675,24 +675,32 @@ VALUES
 	1,
 	3,
 	8,
-	1, -- Padel
-	'2025-12-08',
+	2, -- Tennis
+	'2026-12-08',
 	'19:00:00',
 	'20:00:00',
-	4, -- completed
+	2, -- confirmed
 	0, -- public booking
-	2
+	4
 ),
 (
 	1,
 	4,
 	10,
 	7, -- Football 5-a-side
-	'2025-12-09',
+	'2026-12-09',
 	'07:00:00',
 	'08:00:00',
 	2, -- confirmed
 	0, -- public booking
 	10
 );
+
+-- Host + initial participants for lobby visibility (booking IDs map to inserts above)
+INSERT INTO booking_participants (booking_id, player_id) VALUES
+(1, 1), (1, 2), (1, 3),
+(2, 1), (2, 4),
+(3, 1), (3, 2),
+(4, 1), (4, 3),
+(5, 1), (5, 2), (5, 4);
 
