@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, memo, useEffect } from 'react';
 import {
     View,
     Text,
@@ -21,6 +21,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { API_BASE_URL } from '../../config/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,64 +53,126 @@ const SESSION_TYPE_OPTIONS = [
     'Nutrition Coaching',
 ];
 
+const CourtDropdown = memo(({ selectedCourtId, courts, onSelectCourt, isReadOnly, loading }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>Court / Venue</Text>
+            <TouchableOpacity
+                style={styles.dropdownHeader}
+                onPress={() => !isReadOnly && setIsOpen(!isOpen)}
+                activeOpacity={0.8}
+                disabled={isReadOnly}
+            >
+                <Text style={selectedCourtId ? styles.dropdownHeaderText : styles.placeholderText}>
+                    {loading ? 'Loading courts...' : (courts.find((item) => String(item.courtId) === String(selectedCourtId))?.label || 'Choose a court / venue...')}
+                </Text>
+                <MaterialCommunityIcons
+                    name={isOpen ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color={C.brown}
+                />
+            </TouchableOpacity>
+
+            {isOpen && !isReadOnly && (
+                <View style={styles.dropdownList}>
+                    {courts.length === 0 ? (
+                        <View style={styles.dropdownItem}>
+                            <Text style={styles.dropdownItemText}>No available courts found</Text>
+                        </View>
+                    ) : courts.map((court) => {
+                        const isSelected = String(selectedCourtId) === String(court.courtId);
+                        return (
+                            <TouchableOpacity
+                                key={court.courtId}
+                                style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                                onPress={() => {
+                                    onSelectCourt(court.courtId);
+                                    setIsOpen(false);
+                                }}
+                            >
+                                <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}>
+                                    {court.label}
+                                </Text>
+                                {isSelected && <MaterialCommunityIcons name="check" size={16} color={C.white} />}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            )}
+        </View>
+    );
+});
+
 // ─── Placeholder data ─────────────────────────────────────────────────────────
 
-const INITIAL_TRAININGS = [
-    {
-        id: 't1',
-        title: 'Private Basketball Session',
-        type: 'Private Session',
-        coach: 'Coach Salman',
-        pricePerSession: '3500',
-        duration: '60',
-        description: 'One-on-one basketball skills training covering dribbling, shooting, and court vision.',
-        isAvailable: true,
-        thumbnail: { uri: 'https://images.unsplash.com/photo-1546519638405-a9e517f3b2a8?w=400' },
-        gallery: [],
-    },
-    {
-        id: 't2',
-        title: 'Group Fitness Clinic',
-        type: 'Group Clinic',
-        coach: 'Coach Maria',
-        pricePerSession: '1500',
-        duration: '90',
-        description: 'High-intensity group clinic focused on conditioning and team drills.',
-        isAvailable: true,
-        thumbnail: { uri: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400' },
-        gallery: [],
-    },
-    {
-        id: 't3',
-        title: 'Strength & Conditioning',
-        type: 'Strength & Conditioning',
-        coach: 'Coach Alex',
-        pricePerSession: '2000',
-        duration: '60',
-        description: 'Sport-specific strength training to boost athletic performance.',
-        isAvailable: false,
-        thumbnail: { uri: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400' },
-        gallery: [],
-    },
-];
+const parseApiResponse = async (response) => {
+    const raw = await response.text();
+    try {
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return { error: raw || 'Unexpected response from server' };
+    }
+};
 
-const SESSIONS_DATA = [
-    {
-        title: 'Today',
-        data: [
-            { id: 's1', trainee: 'Ahmed Khan', time: '04:00 PM - 05:00 PM', coach: 'Coach Salman', type: 'Private Session', status: 'Confirmed', price: 'Rs. 3,500' },
-            { id: 's2', trainee: 'Sara Williams', time: '06:00 PM - 07:30 PM', coach: 'Coach Maria', type: 'Group Clinic', status: 'Confirmed', price: 'Rs. 1,500' },
-        ],
-    },
-    {
-        title: 'Upcoming',
-        data: [
-            { id: 's3', trainee: 'Zain Malik', time: 'Oct 24, 05:00 PM', coach: 'Coach Salman', type: 'Strength & Conditioning', status: 'Pending', price: 'Rs. 2,000' },
-            { id: 's4', trainee: 'Hamza Ali', time: 'Oct 25, 08:00 PM', coach: 'Coach Alex', type: 'Basketball Skills', status: 'Confirmed', price: 'Rs. 3,000' },
-            { id: 's5', trainee: 'Omar J.', time: 'Oct 26, 06:00 PM', coach: 'Coach Maria', type: 'Private Session', status: 'Confirmed', price: 'Rs. 3,500' },
-        ],
-    },
-];
+// const INITIAL_TRAININGS = [
+//     {
+//         id: 't1',
+//         title: 'Private Basketball Session',
+//         type: 'Private Session',
+//         coach: 'Coach Salman',
+//         pricePerSession: '3500',
+//         duration: '60',
+//         description: 'One-on-one basketball skills training covering dribbling, shooting, and court vision.',
+//         isAvailable: true,
+//         thumbnail: { uri: 'https://images.unsplash.com/photo-1546519638405-a9e517f3b2a8?w=400' },
+//         gallery: [],
+//     },
+//     {
+//         id: 't2',
+//         title: 'Group Fitness Clinic',
+//         type: 'Group Clinic',
+//         coach: 'Coach Maria',
+//         pricePerSession: '1500',
+//         duration: '90',
+//         description: 'High-intensity group clinic focused on conditioning and team drills.',
+//         isAvailable: true,
+//         thumbnail: { uri: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400' },
+//         gallery: [],
+//     },
+//     {
+//         id: 't3',
+//         title: 'Strength & Conditioning',
+//         type: 'Strength & Conditioning',
+//         coach: 'Coach Alex',
+//         pricePerSession: '2000',
+//         duration: '60',
+//         description: 'Sport-specific strength training to boost athletic performance.',
+//         isAvailable: false,
+//         thumbnail: { uri: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400' },
+//         gallery: [],
+//     },
+
+// ];
+
+// const SESSIONS_DATA = [
+//     {
+//         title: 'Today',
+//         data: [
+//             { id: 's1', trainee: 'Ahmed Khan', time: '04:00 PM - 05:00 PM', coach: 'Coach Salman', type: 'Private Session', status: 'Confirmed', price: 'Rs. 3,500' },
+//             { id: 's2', trainee: 'Sara Williams', time: '06:00 PM - 07:30 PM', coach: 'Coach Maria', type: 'Group Clinic', status: 'Confirmed', price: 'Rs. 1,500' },
+//         ],
+//     },
+//     {
+//         title: 'Upcoming',
+//         data: [
+//             { id: 's3', trainee: 'Zain Malik', time: 'Oct 24, 05:00 PM', coach: 'Coach Salman', type: 'Strength & Conditioning', status: 'Pending', price: 'Rs. 2,000' },
+//             { id: 's4', trainee: 'Hamza Ali', time: 'Oct 25, 08:00 PM', coach: 'Coach Alex', type: 'Basketball Skills', status: 'Confirmed', price: 'Rs. 3,000' },
+//             { id: 's5', trainee: 'Omar J.', time: 'Oct 26, 06:00 PM', coach: 'Coach Maria', type: 'Private Session', status: 'Confirmed', price: 'Rs. 3,500' },
+//         ],
+//     },
+// ];
 
 // ─── Shared Form Components ───────────────────────────────────────────────────
 
@@ -213,9 +276,10 @@ const TrainingPicker = ({ trainings, onSelect, actionLabel, icon }) => (
 
 // ─── AddTrainingForm ──────────────────────────────────────────────────────────
 
-function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
+function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add', trainerId }) {
     const [title, setTitle] = useState(initialData?.title || '');
     const [type, setType] = useState(initialData?.type || '');
+    const [courtId, setCourtId] = useState(initialData?.courtId || '');
     const [coach, setCoach] = useState(initialData?.coach || '');
     const [pricePerSession, setPricePerSession] = useState(initialData?.pricePerSession || '');
     const [duration, setDuration] = useState(initialData?.duration || '');
@@ -224,6 +288,8 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
     const [thumbnail, setThumbnail] = useState(initialData?.thumbnail || null);
     const [gallery, setGallery] = useState(initialData?.gallery || []);
     const [loading, setLoading] = useState(false);
+    const [courts, setCourts] = useState([]);
+    const [courtsLoading, setCourtsLoading] = useState(false);
     const [error, setError] = useState('');
     const errorShake = useRef(new Animated.Value(0)).current;
 
@@ -240,6 +306,34 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
             setThumbnail({ uri: result.assets[0].uri, isLocal: true });
         }
     };
+
+    useEffect(() => {
+        const loadCourts = async () => {
+            setCourtsLoading(true);
+            try {
+                const response = await fetch(`${API_BASE_URL}/trainer/courts`);
+                const responseData = await parseApiResponse(response);
+
+                if (!response.ok) {
+                    throw new Error(responseData.error || 'Failed to load courts');
+                }
+
+                const list = Array.isArray(responseData) ? responseData : [];
+                setCourts(list);
+
+                if (!courtId && list.length > 0 && mode === 'add') {
+                    setCourtId(String(list[0].courtId));
+                }
+            } catch (err) {
+                setError(err.message || 'Could not load courts.');
+                shakeError();
+            } finally {
+                setCourtsLoading(false);
+            }
+        };
+
+        loadCourts();
+    }, []);
 
     const pickGalleryImages = async () => {
         const remainingSlots = 5 - gallery.length;
@@ -273,7 +367,7 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
         ]).start();
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (mode === 'view') return;
 
         if (!title.trim() || !type.trim() || !coach.trim() || !pricePerSession.trim()) {
@@ -282,15 +376,70 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
             return;
         }
 
+        if (!courtId) {
+            setError('Please choose a court / venue.');
+            shakeError();
+            return;
+        }
+
         setError('');
         setLoading(true);
 
-        setTimeout(() => {
+        try {
+            const resolvedTrainerId = trainerId || initialData?.trainerId;
+            if (!resolvedTrainerId) {
+                setError('Trainer ID is missing. Please log in again.');
+                shakeError();
+                return;
+            }
+
+            let response;
+            if (mode === 'add') {
+                response = await fetch(`${API_BASE_URL}/trainer/trainings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trainerId: resolvedTrainerId,
+                        title: title.trim(),
+                        type: type.trim(),
+                        courtId,
+                        coach: coach.trim(),
+                        pricePerSession: Number(pricePerSession),
+                        duration: Number(duration || 60),
+                        description: description.trim(),
+                        isAvailable,
+                    }),
+                });
+            } else {
+                response = await fetch(`${API_BASE_URL}/trainer/trainings/${initialData.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trainerId: resolvedTrainerId,
+                        title: title.trim(),
+                        type: type.trim(),
+                        courtId,
+                        coach: coach.trim(),
+                        pricePerSession: Number(pricePerSession),
+                        duration: Number(duration || 60),
+                        description: description.trim(),
+                        isAvailable,
+                    }),
+                });
+            }
+
+            const responseData = await parseApiResponse(response);
+            if (!response.ok) {
+                throw new Error(responseData.error || 'Failed to save training');
+            }
+
             const trainingObj = {
-                id: initialData?.id || `t_${Date.now()}`,
+                id: mode === 'add' ? String(responseData.id) : String(initialData.id),
+                trainerId: resolvedTrainerId,
                 title: title.trim(),
                 type: type.trim(),
                 coach: coach.trim(),
+                    courtId,
                 pricePerSession: pricePerSession.trim(),
                 duration: duration.trim(),
                 description: description.trim(),
@@ -298,9 +447,13 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
                 thumbnail,
                 gallery,
             };
-            setLoading(false);
             onSave(trainingObj);
-        }, 300);
+        } catch (err) {
+            setError(err.message || 'Could not save training.');
+            shakeError();
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -361,6 +514,14 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
                     selectedType={type}
                     onSelectType={setType}
                     isReadOnly={isReadOnly}
+                />
+
+                <CourtDropdown
+                    selectedCourtId={courtId}
+                    courts={courts}
+                    onSelectCourt={setCourtId}
+                    isReadOnly={isReadOnly}
+                    loading={courtsLoading}
                 />
 
                 <FormInput
@@ -440,10 +601,10 @@ function AddTrainingForm({ onBack, onSave, initialData = null, mode = 'add' }) {
 
 // ─── SubScreenContent ─────────────────────────────────────────────────────────
 
-function SubScreenContent({ type, id, data, onBack, trainings, setTrainings }) {
+function SubScreenContent({ type, id, data, onBack, trainings, setTrainings, user }) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
-    const [selectedTraining, setSelectedTraining] = useState(null);
+    const [selectedTraining, setSelectedTraining] = useState(type === 'training' && id === '3' ? data : null);
 
     React.useEffect(() => {
         Animated.parallel([
@@ -461,15 +622,34 @@ function SubScreenContent({ type, id, data, onBack, trainings, setTrainings }) {
         onBack();
     };
 
-    const handleRemoveTraining = (trainingId) => {
-        setTrainings(prev => prev.filter(t => t.id !== trainingId));
-        onBack();
+    const handleRemoveTraining = async (trainingId) => {
+        try {
+            const resolvedTrainerId = user?.userId || user?.id;
+            if (!resolvedTrainerId) {
+                Alert.alert('Delete failed', 'Trainer ID is missing. Please log in again.');
+                return;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/trainer/trainings/${trainingId}?trainerId=${resolvedTrainerId}`, {
+                method: 'DELETE',
+            });
+            const responseData = await parseApiResponse(response);
+
+            if (!response.ok) {
+                throw new Error(responseData.error || 'Could not delete training');
+            }
+
+            setTrainings(prev => prev.filter(t => t.id !== trainingId));
+            onBack();
+        } catch (err) {
+            Alert.alert('Delete failed', err.message || 'Could not delete training');
+        }
     };
 
     const renderTrainingContent = () => {
         // Mode 1: Add Training
         if (id === '1') {
-            return <AddTrainingForm mode="add" onSave={handleSaveTraining} onBack={onBack} />;
+            return <AddTrainingForm mode="add" onSave={handleSaveTraining} onBack={onBack} trainerId={user?.userId || user?.id} />;
         }
 
         // Modes 2, 3, 4: Require selection first
@@ -494,6 +674,7 @@ function SubScreenContent({ type, id, data, onBack, trainings, setTrainings }) {
                     initialData={selectedTraining}
                     onSave={handleSaveTraining}
                     onBack={onBack}
+                    trainerId={user?.userId || user?.id}
                 />
             );
         }
@@ -503,6 +684,7 @@ function SubScreenContent({ type, id, data, onBack, trainings, setTrainings }) {
                     mode="view"
                     initialData={selectedTraining}
                     onBack={onBack}
+                    trainerId={user?.userId || user?.id}
                 />
             );
         }
@@ -626,28 +808,21 @@ function DashboardScreen({ onActionSelect }) {
     );
 }
 
-function TrainingsScreen({ onSessionSelect }) {
+function TrainingsScreen({ onTrainingSelect, trainings }) {
     const [statusFilter, setStatusFilter] = useState('All');
     const [typeFilter, setTypeFilter] = useState('All');
-    const [timeFilter, setTimeFilter] = useState('All');
 
-    const uniqueTypes = ['All', ...new Set(SESSIONS_DATA.flatMap(s => s.data.map(item => item.type)))];
-    const statuses = ['All', 'Confirmed', 'Pending'];
-    const timeOptions = ['All', 'Today', 'Upcoming'];
+    const uniqueTypes = ['All', ...new Set((trainings || []).map(item => item.type).filter(Boolean))];
+    const statuses = ['All', 'Available', 'Unavailable'];
 
-    const filteredSections = useMemo(() => {
-        return SESSIONS_DATA.map(section => {
-            if (timeFilter !== 'All' && section.title !== timeFilter) {
-                return { ...section, data: [] };
-            }
-            const filteredData = section.data.filter(session => {
-                const statusMatch = statusFilter === 'All' || session.status === statusFilter;
-                const typeMatch = typeFilter === 'All' || session.type === typeFilter;
-                return statusMatch && typeMatch;
-            });
-            return { ...section, data: filteredData };
-        }).filter(section => section.data.length > 0);
-    }, [statusFilter, typeFilter, timeFilter]);
+    const filteredTrainings = useMemo(() => {
+        return (trainings || []).filter((item) => {
+            const statusValue = item?.isAvailable ? 'Available' : 'Unavailable';
+            const statusMatch = statusFilter === 'All' || statusValue === statusFilter;
+            const typeMatch = typeFilter === 'All' || item.type === typeFilter;
+            return statusMatch && typeMatch;
+        });
+    }, [trainings, statusFilter, typeFilter]);
 
     const FilterGroup = ({ label, options, current, setter, icon }) => (
         <View style={styles.filterGroup}>
@@ -671,18 +846,18 @@ function TrainingsScreen({ onSessionSelect }) {
         </View>
     );
 
-    const renderSessionCard = ({ item }) => (
+    const renderTrainingCard = ({ item }) => (
         <TouchableOpacity
             style={styles.sessionCard}
             activeOpacity={0.8}
-            onPress={() => onSessionSelect(item)}
+            onPress={() => onTrainingSelect(item)}
         >
             <View style={styles.sessionInfo}>
                 <View style={styles.sessionHeader}>
-                    <Text style={styles.traineeName}>{item.trainee}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: item.status === 'Confirmed' ? '#E8F5E9' : '#FFF3E0' }]}>
-                        <Text style={[styles.statusText, { color: item.status === 'Confirmed' ? '#2E7D32' : '#EF6C00' }]}>
-                            {item.status}
+                    <Text style={styles.traineeName}>{item.title}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: item.isAvailable ? '#E8F5E9' : '#FFF3E0' }]}>
+                        <Text style={[styles.statusText, { color: item.isAvailable ? '#2E7D32' : '#EF6C00' }]}>
+                            {item.isAvailable ? 'Available' : 'Unavailable'}
                         </Text>
                     </View>
                 </View>
@@ -694,11 +869,11 @@ function TrainingsScreen({ onSessionSelect }) {
                 </View>
                 <View style={styles.sessionDetailRow}>
                     <MaterialCommunityIcons name="clock-check-outline" size={14} color={C.orange} />
-                    <Text style={styles.sessionTimeText}>{item.time}</Text>
+                    <Text style={styles.sessionTimeText}>{item.duration ? `${item.duration} min` : 'Duration N/A'}</Text>
                 </View>
             </View>
             <View style={styles.sessionPriceAction}>
-                <Text style={styles.sessionPrice}>{item.price}</Text>
+                <Text style={styles.sessionPrice}>{item.pricePerSession ? `Rs. ${item.pricePerSession}` : 'Rs. 0'}</Text>
                 <MaterialCommunityIcons name="chevron-right" size={20} color={C.brown + '44'} />
             </View>
         </TouchableOpacity>
@@ -709,29 +884,25 @@ function TrainingsScreen({ onSessionSelect }) {
             <View style={styles.filterContainer}>
                 <FilterGroup label="Status" options={statuses} current={statusFilter} setter={setStatusFilter} icon="filter-variant" />
                 <FilterGroup label="Session Type" options={uniqueTypes} current={typeFilter} setter={setTypeFilter} icon="run-fast" />
-                <FilterGroup label="Timeline" options={timeOptions} current={timeFilter} setter={setTimeFilter} icon="calendar-clock" />
             </View>
 
-            <SectionList
+            <ScrollView
                 showsVerticalScrollIndicator={false}
-                sections={filteredSections}
-                keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.sessionListContent}
-                renderSectionHeader={({ section: { title } }) => (
-                    <View style={styles.sectionHeaderContainer}>
-                        <View style={styles.sectionLine} />
-                        <Text style={styles.sectionTitle}>{title}</Text>
-                        <View style={styles.sectionLine} />
-                    </View>
-                )}
-                renderItem={renderSessionCard}
-                ListEmptyComponent={
+            >
+                {filteredTrainings.length === 0 ? (
                     <View style={styles.emptyState}>
                         <MaterialCommunityIcons name="calendar-remove-outline" size={60} color={C.white + '33'} />
-                        <Text style={styles.emptyStateText}>No sessions found</Text>
+                        <Text style={styles.emptyStateText}>No trainings found</Text>
                     </View>
-                }
-            />
+                ) : (
+                    filteredTrainings.map((item) => (
+                        <View key={item.id}>
+                            {renderTrainingCard({ item })}
+                        </View>
+                    ))
+                )}
+            </ScrollView>
         </View>
     );
 }
@@ -818,9 +989,31 @@ export function TrainerHomeScreen({ user, onLogout }) {
     const insets = useSafeAreaInsets();
     const [activeTab, setActiveTab] = useState(0);
     const [activeSubScreen, setActiveSubScreen] = useState(null);
-    const [trainings, setTrainings] = useState(INITIAL_TRAININGS);
+    const [trainings, setTrainings] = useState([]);
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
+
+    useEffect(() => {
+        const fetchTrainings = async () => {
+            if (!user?.userId) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/trainer/trainings?trainerId=${user.userId}`);
+                const data = await parseApiResponse(response);
+
+                if (!response.ok) {
+                    console.error('Failed to fetch trainer trainings:', data.error || 'Unknown error');
+                    return;
+                }
+
+                setTrainings(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Error fetching trainer trainings:', err);
+            }
+        };
+
+        fetchTrainings();
+    }, [user?.userId]);
 
     const goToTab = useCallback((index) => {
         setActiveSubScreen(null);
@@ -867,7 +1060,8 @@ export function TrainerHomeScreen({ user, onLogout }) {
         />,
         <TrainingsScreen
             key="trainings"
-            onSessionSelect={(session) => setActiveSubScreen({ type: 'session', id: session.id, data: session })}
+            trainings={trainings}
+            onTrainingSelect={(training) => setActiveSubScreen({ type: 'training', id: '3', data: training })}
         />,
         <ProfileScreen
             key="profile"
@@ -939,6 +1133,7 @@ export function TrainerHomeScreen({ user, onLogout }) {
                     data={activeSubScreen.data}
                     trainings={trainings}
                     setTrainings={setTrainings}
+                    user={user}
                     onBack={() => setActiveSubScreen(null)}
                 />
             ) : (

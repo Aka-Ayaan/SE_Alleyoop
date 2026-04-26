@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, memo, useEffect } from 'react';
 import {
     View,
     Text,
@@ -23,6 +23,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { API_BASE_URL } from '../../config/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -48,62 +49,14 @@ const CATEGORY_OPTIONS = ['Footwear', 'Apparel', 'Equipment', 'Accessories', 'Nu
 
 // ─── Placeholder data ─────────────────────────────────────────────────────────
 
-const INITIAL_PRODUCTS = [
-    {
-        id: 'p1',
-        user: {
-            name: 'Nike Air Max 270',
-            category: 'Footwear',
-            image: { uri: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400' },
-            gallery: [],
-            price: '12500',
-            description: 'Comfortable lifestyle sneakers with Air unit cushioning.',
-            isAvailable: true,
-        },
-    },
-    {
-        id: 'p2',
-        user: {
-            name: 'Wilson Evolution Basketball',
-            category: 'Equipment',
-            image: { uri: 'https://images.unsplash.com/photo-1519861531473-920036214751?w=400' },
-            gallery: [],
-            price: '8000',
-            description: 'Official size and weight indoor/outdoor basketball.',
-            isAvailable: true,
-        },
-    },
-    {
-        id: 'p3',
-        user: {
-            name: 'Dri-FIT Training Shirt',
-            category: 'Apparel',
-            image: { uri: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400' },
-            gallery: [],
-            price: '3200',
-            description: 'Moisture-wicking performance training shirt.',
-            isAvailable: false,
-        },
-    },
-];
-
-const ORDERS_DATA = [
-    {
-        title: 'Today',
-        data: [
-            { id: 'o1', customer: 'Ahmed Khan', item: 'Nike Air Max 270', category: 'Footwear', status: 'Processing', price: 'Rs. 12,500' },
-            { id: 'o2', customer: 'Sara Williams', item: 'Wilson Evolution Basketball', category: 'Equipment', status: 'Shipped', price: 'Rs. 8,000' },
-        ],
-    },
-    {
-        title: 'Recent',
-        data: [
-            { id: 'o3', customer: 'Zain Malik', item: 'Dri-FIT Training Shirt', category: 'Apparel', status: 'Delivered', price: 'Rs. 3,200' },
-            { id: 'o4', customer: 'Hamza Ali', item: 'Jordan Jumpman Shorts', category: 'Apparel', status: 'Processing', price: 'Rs. 4,500' },
-            { id: 'o5', customer: 'Omar J.', item: 'Spalding Precision', category: 'Equipment', status: 'Delivered', price: 'Rs. 6,800' },
-        ],
-    },
-];
+const parseApiResponse = async (response) => {
+    const raw = await response.text();
+    try {
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return { error: raw || 'Unexpected response from server' };
+    }
+};
 
 // ─── Shared Form Components ───────────────────────────────────────────────────
 
@@ -205,7 +158,7 @@ const ProductPicker = ({ products, onSelect, actionLabel, icon }) => (
 
 // ─── AddProductForm ───────────────────────────────────────────────────────────
 
-function AddProductForm({ onBack, onSave, initialData = null, mode = 'add' }) {
+function AddProductForm({ onBack, onSave, initialData = null, mode = 'add', sellerId }) {
     const [name, setName] = useState(initialData?.user?.name || '');
     const [category, setCategory] = useState(initialData?.user?.category || '');
     const [price, setPrice] = useState(initialData?.user?.price || '');
@@ -263,7 +216,7 @@ function AddProductForm({ onBack, onSave, initialData = null, mode = 'add' }) {
         setGallery(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (mode === 'view') return;
 
         if (!name.trim() || !category.trim() || !price.trim()) {
@@ -275,10 +228,55 @@ function AddProductForm({ onBack, onSave, initialData = null, mode = 'add' }) {
         setError('');
         setLoading(true);
 
-        // Simulate a short save delay for UX consistency with OwnerHomeScreen
-        setTimeout(() => {
+        try {
+            const resolvedSellerId = sellerId || initialData?.sellerId;
+            if (!resolvedSellerId) {
+                setError('Seller ID is missing. Please log in again.');
+                shakeError();
+                return;
+            }
+
+            const payload = {
+                seller_id: resolvedSellerId,
+                name: name.trim(),
+                description: description.trim(),
+                price: Number(price),
+                stock: Number(initialData?.user?.stock || 0),
+                category: category.trim(),
+                main_image_path: thumbnail?.path || null,
+            };
+
+            let response;
+            if (mode === 'add') {
+                response = await fetch(`${API_BASE_URL}/products`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+            } else {
+                response = await fetch(`${API_BASE_URL}/products/${initialData.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sellerId: resolvedSellerId,
+                        name: payload.name,
+                        description: payload.description,
+                        price: payload.price,
+                        stock: payload.stock,
+                        category: payload.category,
+                        main_image_path: payload.main_image_path,
+                    }),
+                });
+            }
+
+            const responseData = await parseApiResponse(response);
+            if (!response.ok) {
+                throw new Error(responseData.error || 'Failed to save product');
+            }
+
             const productObj = {
-                id: initialData?.id || `p_${Date.now()}`,
+                id: mode === 'add' ? String(responseData.id) : String(initialData.id),
+                sellerId: resolvedSellerId,
                 user: {
                     name: name.trim(),
                     category: category.trim(),
@@ -289,9 +287,14 @@ function AddProductForm({ onBack, onSave, initialData = null, mode = 'add' }) {
                     isAvailable,
                 },
             };
-            setLoading(false);
+
             onSave(productObj);
-        }, 300);
+        } catch (err) {
+            setError(err.message || 'Could not save product.');
+            shakeError();
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -414,7 +417,7 @@ function AddProductForm({ onBack, onSave, initialData = null, mode = 'add' }) {
 
 // ─── SubScreenContent ─────────────────────────────────────────────────────────
 
-function SubScreenContent({ type, id, data, onBack, products, setProducts }) {
+function SubScreenContent({ type, id, data, onBack, products, setProducts, user }) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -435,15 +438,34 @@ function SubScreenContent({ type, id, data, onBack, products, setProducts }) {
         onBack();
     };
 
-    const handleRemoveProduct = (productId) => {
-        setProducts(prev => prev.filter(p => p.id !== productId));
-        onBack();
+    const performDeleteProduct = async (productId) => {
+        try {
+            const resolvedSellerId = user?.userId || user?.id;
+            if (!resolvedSellerId) {
+                Alert.alert('Delete failed', 'Seller ID is missing. Please log in again.');
+                return;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/products/${productId}?sellerId=${resolvedSellerId}`, {
+                method: 'DELETE',
+            });
+            const responseData = await parseApiResponse(response);
+
+            if (!response.ok) {
+                throw new Error(responseData.error || 'Could not delete product');
+            }
+
+            setProducts(prev => prev.filter(p => p.id !== productId));
+            onBack();
+        } catch (err) {
+            Alert.alert('Delete failed', err.message || 'Could not delete product');
+        }
     };
 
     const renderProductContent = () => {
         // Mode 1: Add Product
         if (id === '1') {
-            return <AddProductForm mode="add" onSave={handleSaveProduct} onBack={onBack} />;
+            return <AddProductForm mode="add" onSave={handleSaveProduct} onBack={onBack} sellerId={user?.userId} />;
         }
 
         // Modes 2, 3, 4: Require selection first
@@ -468,6 +490,7 @@ function SubScreenContent({ type, id, data, onBack, products, setProducts }) {
                     initialData={selectedProduct}
                     onSave={handleSaveProduct}
                     onBack={onBack}
+                    sellerId={user?.userId}
                 />
             );
         }
@@ -477,6 +500,7 @@ function SubScreenContent({ type, id, data, onBack, products, setProducts }) {
                     mode="view"
                     initialData={selectedProduct}
                     onBack={onBack}
+                    sellerId={user?.userId}
                 />
             );
         }
@@ -489,7 +513,7 @@ function SubScreenContent({ type, id, data, onBack, products, setProducts }) {
                     </Text>
                     <TouchableOpacity
                         style={[styles.saveButton, { backgroundColor: 'red' }]}
-                        onPress={() => handleRemoveProduct(selectedProduct.id)}
+                        onPress={() => performDeleteProduct(selectedProduct.id)}
                     >
                         <Text style={styles.saveButtonText}>Yes, Delete Product</Text>
                     </TouchableOpacity>
@@ -602,17 +626,51 @@ function DashboardScreen({ onActionSelect }) {
     );
 }
 
-function OrdersScreen({ onOrderSelect }) {
+function OrdersScreen({ onOrderSelect, orders }) {
     const [statusFilter, setStatusFilter] = useState('All');
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [timeFilter, setTimeFilter] = useState('All');
 
-    const uniqueCategories = ['All', ...new Set(ORDERS_DATA.flatMap(s => s.data.map(o => o.category)))];
-    const statuses = ['All', 'Processing', 'Shipped', 'Delivered'];
+    const toTitleCase = (value) => {
+        const raw = String(value || '').trim();
+        if (!raw) return 'Pending';
+        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    };
+
+    const sections = useMemo(() => {
+        const todayDate = new Date().toISOString().slice(0, 10);
+
+        const items = (orders || []).map((o) => {
+            const created = o.createdAt ? new Date(o.createdAt) : null;
+            const createdDate = created && !Number.isNaN(created.getTime())
+                ? created.toISOString().slice(0, 10)
+                : '';
+
+            return {
+                id: String(o.orderItemId || o.orderId),
+                customer: o.customer || 'Customer',
+                item: o.item || 'Item',
+                category: o.category || 'Uncategorized',
+                status: toTitleCase(o.status),
+                price: `Rs. ${Number((o.unitPrice || 0) * (o.quantity || 1)).toLocaleString('en-PK')}`,
+                group: createdDate === todayDate ? 'Today' : 'Recent',
+            };
+        });
+
+        const todayItems = items.filter((i) => i.group === 'Today');
+        const recentItems = items.filter((i) => i.group === 'Recent');
+        const result = [];
+        if (todayItems.length) result.push({ title: 'Today', data: todayItems });
+        if (recentItems.length) result.push({ title: 'Recent', data: recentItems });
+        return result;
+    }, [orders]);
+
+    const uniqueCategories = ['All', ...new Set(sections.flatMap(s => s.data.map(o => o.category)))];
+    const statuses = ['All', 'Pending', 'Paid', 'Shipped', 'Delivered', 'Cancelled'];
     const timeOptions = ['All', 'Today', 'Recent'];
 
     const filteredSections = useMemo(() => {
-        return ORDERS_DATA.map(section => {
+        return sections.map(section => {
             if (timeFilter !== 'All' && section.title !== timeFilter) {
                 return { ...section, data: [] };
             }
@@ -623,7 +681,7 @@ function OrdersScreen({ onOrderSelect }) {
             });
             return { ...section, data: filteredData };
         }).filter(section => section.data.length > 0);
-    }, [statusFilter, categoryFilter, timeFilter]);
+    }, [sections, statusFilter, categoryFilter, timeFilter]);
 
     const FilterGroup = ({ label, options, current, setter, icon }) => (
         <View style={styles.filterGroup}>
@@ -807,10 +865,71 @@ export function SellerHomeScreen({ user, onLogout }) {
     const insets = useSafeAreaInsets();
     const [activeTab, setActiveTab] = useState(0);
     const [activeSubScreen, setActiveSubScreen] = useState(null);
-    const [products, setProducts] = useState(INITIAL_PRODUCTS);
+    const [products, setProducts] = useState([]);
+    const [sellerOrders, setSellerOrders] = useState([]);
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
 
+    useEffect(() => {
+        const fetchProducts = async () => {
+            if (!user?.userId) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/products?sellerId=${user.userId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    console.error('Failed to fetch seller products:', data.error || 'Unknown error');
+                    return;
+                }
+
+                const mapped = (data || []).map((p) => ({
+                    id: String(p.id),
+                    sellerId: p.seller_id,
+                    user: {
+                        name: p.name || '',
+                        category: p.category || '',
+                        image: p.main_image_path
+                            ? { uri: `${API_BASE_URL}${p.main_image_path}`, path: p.main_image_path, isLocal: false }
+                            : null,
+                        gallery: [],
+                        price: String(p.price ?? ''),
+                        description: p.description || '',
+                        isAvailable: Number(p.is_active) === 1,
+                        stock: p.stock || 0,
+                    },
+                }));
+
+                setProducts(mapped);
+            } catch (err) {
+                console.error('Error fetching seller products:', err);
+            }
+        };
+
+        fetchProducts();
+    }, [user?.userId]);
+
+    useEffect(() => {
+        const fetchSellerOrders = async () => {
+            if (!user?.userId) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/orders/seller?sellerId=${user.userId}`);
+                const data = await parseApiResponse(response);
+
+                if (!response.ok) {
+                    console.error('Failed to fetch seller orders:', data.error || 'Unknown error');
+                    return;
+                }
+
+                setSellerOrders(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Error fetching seller orders:', err);
+            }
+        };
+
+        fetchSellerOrders();
+    }, [user?.userId]);
     const goToTab = useCallback((index) => {
         setActiveSubScreen(null);
         setActiveTab(index);
@@ -856,6 +975,7 @@ export function SellerHomeScreen({ user, onLogout }) {
         />,
         <OrdersScreen
             key="orders"
+            orders={sellerOrders}
             onOrderSelect={(order) => setActiveSubScreen({ type: 'order', id: order.id, data: order })}
         />,
         <ProfileScreen
@@ -927,6 +1047,7 @@ export function SellerHomeScreen({ user, onLogout }) {
                     data={activeSubScreen.data}
                     products={products}
                     setProducts={setProducts}
+                    user={user}
                     onBack={() => setActiveSubScreen(null)}
                 />
             ) : (

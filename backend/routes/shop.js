@@ -118,6 +118,45 @@ router.post('/orders', (req, res) => {
   });
 });
 
+// Seller: get all received orders with item details
+router.get('/orders/seller', (req, res) => {
+  const { sellerId } = req.query;
+
+  if (!sellerId) {
+    return res.status(400).json({ error: 'sellerId is required' });
+  }
+
+  const query = `
+    SELECT
+      oi.id AS orderItemId,
+      o.id AS orderId,
+      p.name AS item,
+      p.category AS category,
+      pl.name AS customer,
+      os.status_name AS status,
+      oi.quantity AS quantity,
+      oi.unit_price AS unitPrice,
+      o.total_amount AS orderTotal,
+      o.created_at AS createdAt
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.id
+    JOIN products p ON p.id = oi.product_id
+    JOIN players pl ON pl.id = o.player_id
+    JOIN order_status os ON os.id = o.status_id
+    WHERE o.seller_id = ?
+    ORDER BY o.created_at DESC, oi.id DESC
+  `;
+
+  db.query(query, [sellerId], (err, results) => {
+    if (err) {
+      console.error('Error fetching seller orders:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    return res.json(results);
+  });
+});
+
 // Player: get own orders
 router.get('/orders/:playerId', (req, res) => {
   const { playerId } = req.params;
@@ -144,5 +183,71 @@ router.get('/orders/:playerId', (req, res) => {
     return res.json(results);
   });
 });
+
+//delete product (seller only)
+router.delete('/products/:productId', (req, res) => {
+  const { productId } = req.params;
+  const { sellerId } = req.query;
+
+  if (!sellerId) {
+    return res.status(400).json({ error: 'sellerId is required' });
+  }
+
+  const query = 'DELETE FROM products WHERE id = ? AND seller_id = ?';
+
+  db.query(query, [productId, sellerId], (err, result) => {
+    if (err) {
+      console.error('Error deleting product:', err);
+      if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+        // If historical order_items reference this product, hide it instead of failing hard delete.
+        const softDeleteQuery = 'UPDATE products SET is_active = 0 WHERE id = ? AND seller_id = ?';
+        db.query(softDeleteQuery, [productId, sellerId], (softErr, softResult) => {
+          if (softErr) {
+            console.error('Error soft deleting product:', softErr);
+            return res.status(500).json({ error: 'Database error' });
+          }
+          if (softResult.affectedRows === 0) {
+            return res.status(404).json({ error: 'Product not found for this seller' });
+          }
+          return res.json({ message: 'Product archived successfully (linked to previous orders)' });
+        });
+        return;
+      }
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Product not found for this seller' });
+    }
+    return res.json({ message: 'Product deleted successfully' });
+  });
+});
+
+//update product (seller only)
+router.put('/products/:productId', (req, res) => {
+  const { productId } = req.params;
+  const { sellerId, name, description, price, stock, category, main_image_path } = req.body;
+
+  if ( !sellerId || !name || price === undefined || price === null) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const query = `
+    UPDATE products
+    SET name = ?, description = ?, price = ?, stock = ?, category = ?, main_image_path = ?
+    WHERE id = ? AND seller_id = ?
+  `;
+
+  db.query(query, [name, description, price, stock, category, main_image_path, productId, sellerId], (err, result) => {
+    if (err) {
+      console.error('Error updating product:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Product not found for this seller' });
+    }
+    return res.json({ message: 'Product updated successfully' });
+  });
+});
+
 
 module.exports = router;
