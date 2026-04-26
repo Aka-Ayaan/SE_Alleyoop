@@ -1,10 +1,11 @@
-import React, { useState, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     ScrollView,
+    FlatList,
     Image,
     Dimensions,
     Animated,
@@ -12,17 +13,10 @@ import {
     StatusBar,
     Platform,
     SectionList,
-    KeyboardAvoidingView,
-    Switch,
-    TextInput,
-    Modal,
-    FlatList,
-    Alert,
-    ActivityIndicator,
+    Touchable,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,48 +38,7 @@ const TABS = [
     { id: 'profile', label: 'Profile', icon: 'account-circle-outline', activeIcon: 'account-circle' },
 ];
 
-const CATEGORY_OPTIONS = ['Footwear', 'Apparel', 'Equipment', 'Accessories', 'Nutrition'];
-
-// ─── Placeholder data ─────────────────────────────────────────────────────────
-
-const INITIAL_PRODUCTS = [
-    {
-        id: 'p1',
-        user: {
-            name: 'Nike Air Max 270',
-            category: 'Footwear',
-            image: { uri: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400' },
-            gallery: [],
-            price: '12500',
-            description: 'Comfortable lifestyle sneakers with Air unit cushioning.',
-            isAvailable: true,
-        },
-    },
-    {
-        id: 'p2',
-        user: {
-            name: 'Wilson Evolution Basketball',
-            category: 'Equipment',
-            image: { uri: 'https://images.unsplash.com/photo-1519861531473-920036214751?w=400' },
-            gallery: [],
-            price: '8000',
-            description: 'Official size and weight indoor/outdoor basketball.',
-            isAvailable: true,
-        },
-    },
-    {
-        id: 'p3',
-        user: {
-            name: 'Dri-FIT Training Shirt',
-            category: 'Apparel',
-            image: { uri: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400' },
-            gallery: [],
-            price: '3200',
-            description: 'Moisture-wicking performance training shirt.',
-            isAvailable: false,
-        },
-    },
-];
+// ─── Placeholder data ────────────────────────────────────────────────────────
 
 const ORDERS_DATA = [
     {
@@ -105,463 +58,51 @@ const ORDERS_DATA = [
     },
 ];
 
-// ─── Shared Form Components ───────────────────────────────────────────────────
+// ─── Tab screens ─────────────────────────────────────────────────────────────
 
-const FormInput = memo(({ label, value, onChangeText, placeholder, ...props }) => (
-    <View style={styles.inputGroup}>
-        <Text style={styles.label}>{label}</Text>
-        <TextInput
-            style={styles.input}
-            placeholder={placeholder}
-            value={value}
-            onChangeText={onChangeText}
-            placeholderTextColor={C.mutedText}
-            {...props}
-        />
-    </View>
-));
-
-const CategoryDropdown = memo(({ selectedCategory, onSelectCategory, isReadOnly, label = 'Category' }) => {
-    const [isOpen, setIsOpen] = useState(false);
-
-    return (
-        <View style={styles.inputGroup}>
-            <Text style={styles.label}>{label}</Text>
-            <TouchableOpacity
-                style={styles.dropdownHeader}
-                onPress={() => setIsOpen(!isOpen)}
-                activeOpacity={0.8}
-                disabled={isReadOnly}
-            >
-                <Text style={selectedCategory ? styles.dropdownHeaderText : styles.placeholderText}>
-                    {selectedCategory || 'Choose a category...'}
-                </Text>
-                <MaterialCommunityIcons
-                    name={isOpen ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={C.brown}
-                />
-            </TouchableOpacity>
-
-            {isOpen && (
-                <View style={styles.dropdownList}>
-                    {CATEGORY_OPTIONS.map(cat => {
-                        const isSelected = selectedCategory === cat;
-                        return (
-                            <TouchableOpacity
-                                key={cat}
-                                style={[styles.sportItem, isSelected && styles.sportItemActive]}
-                                onPress={() => {
-                                    onSelectCategory(cat);
-                                    setIsOpen(false);
-                                }}
-                            >
-                                <Text style={[styles.sportItemText, isSelected && styles.sportItemTextActive]}>{cat}</Text>
-                                {isSelected && <MaterialCommunityIcons name="check" size={16} color={C.white} />}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-            )}
-        </View>
-    );
-});
-
-const ProductPicker = ({ products, onSelect, actionLabel, icon }) => (
-    <ScrollView contentContainerStyle={styles.formScroll}>
-        <Text style={[styles.sectionLabel, { marginBottom: 20 }]}>Select a Product to {actionLabel}</Text>
-        {products.length === 0 ? (
-            <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="package-variant-closed" size={50} color={C.brown + '33'} />
-                <Text style={{ color: C.brown, marginTop: 12 }}>No products added yet.</Text>
-            </View>
-        ) : (
-            products.map(item => (
-                <TouchableOpacity
-                    key={item.id}
-                    style={styles.card}
-                    onPress={() => onSelect(item)}
-                >
-                    {item.user.image ? (
-                        <Image
-                            source={{ uri: item.user.image.uri }}
-                            style={{ width: 50, height: 50, borderRadius: 10, marginRight: 15 }}
-                        />
-                    ) : (
-                        <View style={[styles.iconWrapper, { marginRight: 15 }]}>
-                            <MaterialCommunityIcons name="package-variant-closed" size={24} color={C.brown} />
-                        </View>
-                    )}
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.cardText}>{item.user.name}</Text>
-                        <Text style={styles.subLabel}>{item.user.category}</Text>
-                    </View>
-                    <MaterialCommunityIcons name={icon} size={24} color={C.orange} />
-                </TouchableOpacity>
-            ))
-        )}
-    </ScrollView>
-);
-
-// ─── AddProductForm ───────────────────────────────────────────────────────────
-
-function AddProductForm({ onBack, onSave, initialData = null, mode = 'add' }) {
-    const [name, setName] = useState(initialData?.user?.name || '');
-    const [category, setCategory] = useState(initialData?.user?.category || '');
-    const [price, setPrice] = useState(initialData?.user?.price || '');
-    const [description, setDescription] = useState(initialData?.user?.description || '');
-    const [isAvailable, setIsAvailable] = useState(initialData?.user?.isAvailable ?? true);
-    const [thumbnail, setThumbnail] = useState(initialData?.user?.image || null);
-    const [gallery, setGallery] = useState(initialData?.user?.gallery || []);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const errorShake = useRef(new Animated.Value(0)).current;
-
-    const isReadOnly = mode === 'view';
-
-    const shakeError = () => {
-        Animated.sequence([
-            Animated.timing(errorShake, { toValue: 10, duration: 60, useNativeDriver: true }),
-            Animated.timing(errorShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-            Animated.timing(errorShake, { toValue: 6, duration: 60, useNativeDriver: true }),
-            Animated.timing(errorShake, { toValue: -6, duration: 60, useNativeDriver: true }),
-            Animated.timing(errorShake, { toValue: 0, duration: 60, useNativeDriver: true }),
-        ]).start();
-    };
-
-    const pickImage = async () => {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: 'images',
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.7,
-        });
-        if (!result.canceled) {
-            setThumbnail({ uri: result.assets[0].uri, isLocal: true });
-        }
-    };
-
-    const pickGalleryImages = async () => {
-        const remainingSlots = 5 - gallery.length;
-        if (remainingSlots <= 0) {
-            Alert.alert('Limit reached', 'You can only add up to 5 gallery images.');
-            return;
-        }
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsMultipleSelection: true,
-            selectionLimit: remainingSlots,
-            quality: 0.6,
-        });
-        if (!result.canceled) {
-            const newItems = result.assets.map(asset => ({ uri: asset.uri, isLocal: true }));
-            setGallery(prev => [...prev, ...newItems].slice(0, 5));
-        }
-    };
-
-    const removeGalleryImage = (index) => {
-        setGallery(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const handleSave = () => {
-        if (mode === 'view') return;
-
-        if (!name.trim() || !category.trim() || !price.trim()) {
-            setError('Please fill in all required fields: name, category, and price.');
-            shakeError();
-            return;
-        }
-
-        setError('');
-        setLoading(true);
-
-        // Simulate a short save delay for UX consistency with OwnerHomeScreen
-        setTimeout(() => {
-            const productObj = {
-                id: initialData?.id || `p_${Date.now()}`,
-                user: {
-                    name: name.trim(),
-                    category: category.trim(),
-                    price: price.trim(),
-                    description: description.trim(),
-                    image: thumbnail,
-                    gallery,
-                    isAvailable,
-                },
-            };
-            setLoading(false);
-            onSave(productObj);
-        }, 300);
-    };
-
-    return (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.formContainer}>
-            <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
-
-                {/* Thumbnail */}
-                <Text style={styles.sectionLabel}>Product Image</Text>
-                <TouchableOpacity
-                    style={styles.imagePickerFrame}
-                    onPress={isReadOnly ? null : pickImage}
-                    disabled={isReadOnly}
-                >
-                    {thumbnail ? (
-                        <Image source={{ uri: thumbnail.uri }} style={styles.previewImage} />
-                    ) : (
-                        <View style={styles.imagePlaceholder}>
-                            <MaterialCommunityIcons name="camera-plus" size={40} color={C.brown + '44'} />
-                            <Text style={[styles.subLabel, { marginTop: 8 }]}>Tap to add image</Text>
-                        </View>
-                    )}
-                </TouchableOpacity>
-
-                {/* Gallery */}
-                <Text style={styles.sectionLabel}>Gallery ({gallery.length}/5)</Text>
-                <View style={styles.galleryContainer}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {gallery.map((item, index) => (
-                            <View key={index} style={styles.galleryWrapper}>
-                                <Image source={{ uri: item.uri }} style={styles.galleryImage} />
-                                {!isReadOnly && (
-                                    <TouchableOpacity
-                                        style={styles.removeIcon}
-                                        onPress={() => removeGalleryImage(index)}
-                                    >
-                                        <MaterialCommunityIcons name="close-circle" size={20} color="red" />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        ))}
-                        {!isReadOnly && gallery.length < 5 && (
-                            <TouchableOpacity style={styles.addGalleryButton} onPress={pickGalleryImages}>
-                                <MaterialCommunityIcons name="plus" size={30} color="#888" />
-                            </TouchableOpacity>
-                        )}
-                    </ScrollView>
-                </View>
-
-                <FormInput
-                    label="Product Name"
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="e.g. Nike Air Max 270"
-                    editable={!isReadOnly}
-                />
-
-                <CategoryDropdown
-                    selectedCategory={category}
-                    onSelectCategory={setCategory}
-                    isReadOnly={isReadOnly}
-                />
-
-                <FormInput
-                    label="Price (Rs.)"
-                    value={price}
-                    onChangeText={setPrice}
-                    placeholder="e.g. 12500"
-                    keyboardType="numeric"
-                    editable={!isReadOnly}
-                />
-
-                <FormInput
-                    label="Description"
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholder="Brief product description..."
-                    multiline
-                    numberOfLines={4}
-                    editable={!isReadOnly}
-                    style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
-                />
-
-                {/* Availability Toggle */}
-                <View style={styles.rowBetweenCompact}>
-                    <Text style={styles.label}>Available for Sale</Text>
-                    <Switch
-                        value={isAvailable}
-                        onValueChange={setIsAvailable}
-                        disabled={isReadOnly}
-                        trackColor={{ false: '#ccc', true: C.orange + '88' }}
-                        thumbColor={isAvailable ? C.orange : '#f4f3f4'}
-                    />
-                </View>
-
-                {error ? (
-                    <Animated.View style={[styles.errorBox, { transform: [{ translateX: errorShake }] }]}>
-                        <Text style={styles.errorText}>{error}</Text>
-                    </Animated.View>
-                ) : null}
-
-                {mode !== 'view' && (
-                    <TouchableOpacity
-                        style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                        onPress={handleSave}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color={C.white} />
-                        ) : (
-                            <Text style={styles.saveButtonText}>
-                                {mode === 'add' ? 'Create Product' : 'Update Product'}
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-                )}
-            </ScrollView>
-        </KeyboardAvoidingView>
-    );
-}
-
-// ─── SubScreenContent ─────────────────────────────────────────────────────────
-
-function SubScreenContent({ type, id, data, onBack, products, setProducts }) {
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(20)).current;
-    const [selectedProduct, setSelectedProduct] = useState(null);
-
-    React.useEffect(() => {
-        Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-            Animated.timing(slideAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-        ]).start();
-    }, []);
-
-    const handleSaveProduct = (updatedProduct) => {
-        if (id === '1') {
-            setProducts(prev => [...prev, updatedProduct]);
-        } else {
-            setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-        }
-        onBack();
-    };
-
-    const handleRemoveProduct = (productId) => {
-        setProducts(prev => prev.filter(p => p.id !== productId));
-        onBack();
-    };
-
-    const renderProductContent = () => {
-        // Mode 1: Add Product
-        if (id === '1') {
-            return <AddProductForm mode="add" onSave={handleSaveProduct} onBack={onBack} />;
-        }
-
-        // Modes 2, 3, 4: Require selection first
-        if (!selectedProduct) {
-            const labels = { '2': 'Update', '3': 'View', '4': 'Remove' };
-            const icons = { '2': 'pencil', '3': 'eye', '4': 'delete' };
-            return (
-                <ProductPicker
-                    products={products}
-                    actionLabel={labels[id]}
-                    icon={icons[id]}
-                    onSelect={setSelectedProduct}
-                />
-            );
-        }
-
-        // Once a product is selected:
-        if (id === '2') {
-            return (
-                <AddProductForm
-                    mode="edit"
-                    initialData={selectedProduct}
-                    onSave={handleSaveProduct}
-                    onBack={onBack}
-                />
-            );
-        }
-        if (id === '3') {
-            return (
-                <AddProductForm
-                    mode="view"
-                    initialData={selectedProduct}
-                    onBack={onBack}
-                />
-            );
-        }
-        if (id === '4') {
-            return (
-                <View style={styles.formScroll}>
-                    <Text style={styles.headerText}>Are you sure?</Text>
-                    <Text style={[styles.placeholderText, { marginBottom: 30 }]}>
-                        You are about to delete "{selectedProduct.user.name}". This action cannot be undone.
-                    </Text>
-                    <TouchableOpacity
-                        style={[styles.saveButton, { backgroundColor: 'red' }]}
-                        onPress={() => handleRemoveProduct(selectedProduct.id)}
-                    >
-                        <Text style={styles.saveButtonText}>Yes, Delete Product</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.submitBtn, { backgroundColor: C.bg }]}
-                        onPress={() => setSelectedProduct(null)}
-                    >
-                        <Text style={[styles.submitBtnText, { color: C.brown }]}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
-            );
-        }
-    };
-
-    const renderOrderContent = () => {
-        if (!data) return null;
-        const { customer, item, category, status, price } = data;
-        return (
-            <View style={styles.formScroll}>
-                <Text style={styles.headerText}>Order Details</Text>
-                <Text style={styles.label}>Customer</Text>
-                <Text style={styles.bookingDetailText}>{customer || 'N/A'}</Text>
-                <Text style={[styles.label, { marginTop: 16 }]}>Product</Text>
-                <Text style={styles.bookingDetailText}>{item}</Text>
-                {category && (
-                    <>
-                        <Text style={[styles.label, { marginTop: 16 }]}>Category</Text>
-                        <Text style={styles.bookingDetailText}>{category}</Text>
-                    </>
-                )}
-                <Text style={[styles.label, { marginTop: 16 }]}>Status</Text>
-                <Text style={styles.bookingDetailText}>{status}</Text>
-                {price && (
-                    <>
-                        <Text style={[styles.label, { marginTop: 16 }]}>Price</Text>
-                        <Text style={styles.bookingDetailText}>{price}</Text>
-                    </>
-                )}
-            </View>
-        );
-    };
-
-    const renderProfileContent = () => (
-        <View style={styles.formScroll}>
-            <Text style={styles.headerText}>{id}</Text>
-            <Text style={styles.placeholderText}>Coming soon.</Text>
-        </View>
-    );
-
+function SubScreenContent({ type, id, data, onBack }) {
+    // Labels for the sub-screens
     const getTitle = () => {
         if (type === 'product') {
-            return { '1': 'Add Product', '2': 'Update Product', '3': 'Product Details', '4': 'Remove Product' }[id];
+            return { '1': 'Add Product', '2': 'Update Product', '3': 'View Product', '4': 'Remove Product' }[id];
         }
         if (type === 'order') return 'Order Details';
-        return id;
+        if (type === 'profile') return id; // e.g., "Edit Profile"
+        return 'Details';
     };
 
     return (
-        <Animated.View
-            style={[styles.subScreenContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-        >
-            <View style={styles.subScreenHeader}>
-                <Text style={styles.subScreenTitle}>{getTitle()}</Text>
+        <View style={styles.formContainer}>
+
+            <View style={styles.arcContainer} pointerEvents="none">
+                <View style={styles.arcInner} />
+                <View style={styles.halfCircle} />
             </View>
-            {type === 'product' && renderProductContent()}
-            {type === 'order' && renderOrderContent()}
-            {type === 'profile' && renderProfileContent()}
-        </Animated.View>
+
+            <View style={styles.formHeader}>
+                <Text style={styles.formTitle}>{getTitle()}</Text>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.formScroll}>
+                <View style={styles.placeholderForm}>
+                    <MaterialCommunityIcons
+                        name={type === 'order' ? "shopping" : type === 'profile' ? "account-cog" : "form-select"}
+                        size={80}
+                        color={C.orange + '22'}
+                    />
+                    <Text style={styles.placeholderText}>
+                        {type === 'order' ? `Viewing Order for: ${data?.customer}` : `Interface for ${getTitle()}`}
+                    </Text>
+
+                    {/* Example Action Button */}
+                    <TouchableOpacity style={styles.submitBtn} onPress={onBack}>
+                        <Text style={styles.submitBtnText}>Done</Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+        </View>
     );
 }
-
-// ─── Tab Screens ──────────────────────────────────────────────────────────────
 
 function DashboardScreen({ onActionSelect }) {
     const menuItems = [
@@ -593,7 +134,9 @@ function DashboardScreen({ onActionSelect }) {
                         <View style={[styles.iconWrapper, { backgroundColor: C.brown + '15' }]}>
                             <MaterialCommunityIcons name={item.icon} size={32} color={C.brown} />
                         </View>
+
                         <Text style={styles.cardText}>{item.title}</Text>
+
                         <MaterialCommunityIcons name="chevron-right" size={24} color="#CCC" />
                     </TouchableOpacity>
                 ))}
@@ -603,28 +146,35 @@ function DashboardScreen({ onActionSelect }) {
 }
 
 function OrdersScreen({ onOrderSelect }) {
+    // 1. States for filtering
     const [statusFilter, setStatusFilter] = useState('All');
     const [categoryFilter, setCategoryFilter] = useState('All');
-    const [timeFilter, setTimeFilter] = useState('All');
+    const [timeFilter, setTimeFilter] = useState('All'); // All, Today, Recent
 
+    // 2. Extract unique categories for the filter list
     const uniqueCategories = ['All', ...new Set(ORDERS_DATA.flatMap(s => s.data.map(o => o.category)))];
     const statuses = ['All', 'Processing', 'Shipped', 'Delivered'];
     const timeOptions = ['All', 'Today', 'Recent'];
 
+    // 3. Filter Logic
     const filteredSections = useMemo(() => {
         return ORDERS_DATA.map(section => {
+            // Check if this section matches the Time Filter
             if (timeFilter !== 'All' && section.title !== timeFilter) {
                 return { ...section, data: [] };
             }
+
             const filteredData = section.data.filter(order => {
                 const statusMatch = statusFilter === 'All' || order.status === statusFilter;
                 const categoryMatch = categoryFilter === 'All' || order.category === categoryFilter;
                 return statusMatch && categoryMatch;
             });
+
             return { ...section, data: filteredData };
         }).filter(section => section.data.length > 0);
     }, [statusFilter, categoryFilter, timeFilter]);
 
+    // UI Component for Filter Chips
     const FilterGroup = ({ label, options, current, setter, icon }) => (
         <View style={styles.filterGroup}>
             <View style={styles.filterLabelRow}>
@@ -647,41 +197,45 @@ function OrdersScreen({ onOrderSelect }) {
         </View>
     );
 
-    const getStatusStyles = (status) => {
-        switch (status) {
-            case 'Delivered': return { bg: '#E8F5E9', text: '#2E7D32' };
-            case 'Shipped': return { bg: '#E3F2FD', text: '#1565C0' };
-            case 'Processing': return { bg: '#FFF3E0', text: '#EF6C00' };
-            default: return { bg: '#F5F5F5', text: '#616161' };
-        }
-    };
-
     const renderOrderCard = ({ item }) => {
+        // Dynamic status colors
+        const getStatusStyles = (status) => {
+            switch (status) {
+                case 'Delivered': return { bg: '#E8F5E9', text: '#2E7D32' };
+                case 'Shipped': return { bg: '#E3F2FD', text: '#1565C0' };
+                case 'Processing': return { bg: '#FFF3E0', text: '#EF6C00' };
+                default: return { bg: '#F5F5F5', text: '#616161' };
+            }
+        };
+
         const statusStyle = getStatusStyles(item.status);
+
         return (
             <TouchableOpacity
-                style={styles.bookingCard}
+                style={styles.orderCard}
                 activeOpacity={0.8}
-                onPress={() => onOrderSelect(item)}
+                onPress={() => onOrderSelect(item)} // Trigger selection
             >
-                <View style={styles.bookingInfo}>
-                    <View style={styles.bookingHeader}>
-                        <Text style={styles.bookingCustomer}>{item.customer}</Text>
+                <View style={styles.orderInfo}>
+                    <View style={styles.orderHeader}>
+                        <Text style={styles.customerName}>{item.customer}</Text>
                         <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                            <Text style={[styles.statusText, { color: statusStyle.text }]}>{item.status}</Text>
+                            <Text style={[styles.statusText, { color: statusStyle.text }]}>
+                                {item.status}
+                            </Text>
                         </View>
                     </View>
-                    <View style={styles.bookingDetailRow}>
+                    <View style={styles.orderDetailRow}>
                         <MaterialCommunityIcons name="package-variant-closed" size={14} color={C.brown + '99'} />
-                        <Text style={styles.bookingDetailText}>{item.item}</Text>
+                        <Text style={styles.orderDetailText}>{item.item}</Text>
                     </View>
-                    <View style={styles.bookingDetailRow}>
+                    <View style={styles.orderDetailRow}>
                         <MaterialCommunityIcons name="tag-outline" size={14} color={C.orange} />
-                        <Text style={styles.bookingTimeText}>{item.category}</Text>
+                        <Text style={styles.categoryText}>{item.category}</Text>
                     </View>
                 </View>
-                <View style={styles.bookingPriceAction}>
-                    <Text style={styles.bookingPrice}>{item.price}</Text>
+                <View style={styles.orderPriceAction}>
+                    <Text style={styles.orderPrice}>{item.price}</Text>
                     <MaterialCommunityIcons name="chevron-right" size={20} color={C.brown + '44'} />
                 </View>
             </TouchableOpacity>
@@ -689,12 +243,8 @@ function OrdersScreen({ onOrderSelect }) {
     };
 
     return (
-        <View style={styles.rootbrown}>
-            <View style={styles.arcContainer} pointerEvents="none">
-                <View style={styles.arcOuter} />
-                <View style={styles.arcInner} />
-            </View>
-
+        <View style={styles.rootContainer}>
+            {/* --- Filter Bar Area --- */}
             <View style={styles.filterContainer}>
                 <FilterGroup label="Status" options={statuses} current={statusFilter} setter={setStatusFilter} icon="filter-variant" />
                 <FilterGroup label="Categories" options={uniqueCategories} current={categoryFilter} setter={setCategoryFilter} icon="shape-outline" />
@@ -705,7 +255,7 @@ function OrdersScreen({ onOrderSelect }) {
                 showsVerticalScrollIndicator={false}
                 sections={filteredSections}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.bookingListContent}
+                contentContainerStyle={styles.orderListContent}
                 renderSectionHeader={({ section: { title } }) => (
                     <View style={styles.sectionHeaderContainer}>
                         <View style={styles.sectionLine} />
@@ -745,15 +295,15 @@ function ProfileScreen({ onLogout, user, onMenuSelect }) {
                     <View style={styles.profileAvatarWrap}>
                         <View style={styles.profileAvatar}>
                             <Text style={styles.profileAvatarText}>
-                                {user?.name ? user.name.charAt(0).toUpperCase() : 'S'}
+                                {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
                             </Text>
                         </View>
                         <TouchableOpacity style={styles.profileAvatarEdit}>
                             <MaterialCommunityIcons name="camera" size={14} color={C.white} />
                         </TouchableOpacity>
                     </View>
-                    <Text style={styles.profileName}>{user?.name || 'Alleyoop Seller'}</Text>
-                    <Text style={styles.profileEmail}>{user?.email || 'seller@example.com'}</Text>
+                    <Text style={styles.profileName}>{user?.name || 'Alleyoop User'}</Text>
+                    <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
                     <View style={styles.profileBadge}>
                         <MaterialCommunityIcons name="shopping" size={12} color={C.orange} />
                         <Text style={styles.profileBadgeText}>{user?.userType || 'Seller'}</Text>
@@ -775,12 +325,12 @@ function ProfileScreen({ onLogout, user, onMenuSelect }) {
 
                 {/* Menu items */}
                 <View style={styles.menuSection}>
-                    {menuItems.map((item) => (
+                    {menuItems.map((item, i) => (
                         <TouchableOpacity
                             key={item.label}
                             style={styles.menuItem}
                             activeOpacity={0.7}
-                            onPress={() => onMenuSelect(item.label)}
+                            onPress={() => onMenuSelect(item.label)} // Trigger selection
                         >
                             <View style={styles.menuIconWrap}>
                                 <MaterialCommunityIcons name={item.icon} size={20} color={C.orange} />
@@ -801,19 +351,18 @@ function ProfileScreen({ onLogout, user, onMenuSelect }) {
     );
 }
 
-// ─── Main SellerHomeScreen ────────────────────────────────────────────────────
+// ─── Main HomeScreen ──────────────────────────────────────────────────────────
 
 export function SellerHomeScreen({ user, onLogout }) {
-    const insets = useSafeAreaInsets();
+    const insets = useSafeAreaInsets(); // This gets the status bar height
     const [activeTab, setActiveTab] = useState(0);
     const [activeSubScreen, setActiveSubScreen] = useState(null);
-    const [products, setProducts] = useState(INITIAL_PRODUCTS);
     const translateX = useRef(new Animated.Value(0)).current;
     const swipeStartX = useRef(0);
 
     const goToTab = useCallback((index) => {
-        setActiveSubScreen(null);
         setActiveTab(index);
+        setActiveSubScreen(null); // Reset when switching tabs
         Animated.spring(translateX, {
             toValue: -index * width,
             useNativeDriver: true,
@@ -868,10 +417,13 @@ export function SellerHomeScreen({ user, onLogout }) {
 
     return (
         <View style={[styles.rootwhite, { paddingTop: insets.top }]}>
+            {/* Set translucent to true so the background color can sit behind the status bar icons */}
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
 
             {/* ── Top bar ── */}
-            <View style={styles.topBar}>
+            <View style={[styles.topBar, { paddingTop: insets.top }]}>
+
+                {/* LEFT SIDE: Conditional Tab Label or Back Button */}
                 <View style={styles.topBarSide}>
                     {activeSubScreen ? (
                         <TouchableOpacity
@@ -882,18 +434,11 @@ export function SellerHomeScreen({ user, onLogout }) {
                             <Text style={styles.headerBackText}>Back</Text>
                         </TouchableOpacity>
                     ) : (
-                        <Text
-                            style={styles.topBarTitle}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                            minimumFontScale={0.8}
-                        >
-                            {currentTab.label}
-                        </Text>
+                        <Text style={styles.topBarTitle}>{currentTab.label}</Text>
                     )}
                 </View>
 
-                {/* Center: Logo */}
+                {/* Center Side: Logo */}
                 <View style={styles.topBarCenter}>
                     <Image
                         source={require('../../../assets/top-minimal.png')}
@@ -902,31 +447,26 @@ export function SellerHomeScreen({ user, onLogout }) {
                     />
                 </View>
 
-                {/* Right: Action */}
+                {/* Right Side: Action Button */}
                 <View style={styles.topBarSide}>
+                    {/* Hide search if a subscreen is open */}
                     {!activeSubScreen && (
-                        <TouchableOpacity
-                            style={styles.topBarAction}
-                            onPress={activeTab === 2 ? onLogout : () => { }}
-                        >
+                        <TouchableOpacity style={styles.topBarAction}>
                             <MaterialCommunityIcons
-                                name={activeTab < 2 ? 'magnify' : 'logout'}
+                                name={activeTab === 2 ? "logout" : "magnify"}
                                 size={26}
-                                color={activeTab < 2 ? C.brown : C.orange}
+                                color={C.brown}
                             />
                         </TouchableOpacity>
                     )}
                 </View>
             </View>
 
-            {/* ── Body ── */}
+
+            {/* Conditional Main Body */}
             {activeSubScreen ? (
                 <SubScreenContent
-                    type={activeSubScreen.type}
-                    id={activeSubScreen.id}
-                    data={activeSubScreen.data}
-                    products={products}
-                    setProducts={setProducts}
+                    {...activeSubScreen}
                     onBack={() => setActiveSubScreen(null)}
                 />
             ) : (
@@ -959,6 +499,7 @@ export function SellerHomeScreen({ user, onLogout }) {
                     </View>
                 </>
             )}
+
         </View>
     );
 }
@@ -966,16 +507,19 @@ export function SellerHomeScreen({ user, onLogout }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-    rootwhite: {
+    root: {
         flex: 1,
-        backgroundColor: C.white,
+        backgroundColor: C.brown,
     },
     rootbrown: {
         flex: 1,
         backgroundColor: C.brown,
     },
+    rootwhite: {
+        flex: 1,
+        backgroundColor: C.white,
+    },
 
-    // ── Arcs ──────────────────────────────────────────────────────────────────
     arcContainer: {
         ...StyleSheet.absoluteFillObject,
         overflow: 'hidden',
@@ -1011,7 +555,7 @@ const styles = StyleSheet.create({
         borderColor: C.orange + '10',
     },
 
-    // ── Top bar ───────────────────────────────────────────────────────────────
+    // ── Top bar ────────────────────────────────────────────────────────────────
     topBar: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1020,43 +564,45 @@ const styles = StyleSheet.create({
         backgroundColor: C.white,
         borderBottomWidth: 1,
         borderBottomColor: C.border,
-        height: 60,
-        paddingBottom: 5,
+        paddingBottom: 10,
+        // Add an explicit height to ensure content has room
+        height: 70,
     },
     topBarSide: {
-        width: 92,
-        justifyContent: 'center',
+        width: 75, // Gives enough room for "Venues" and the Icon
     },
     topBarCenter: {
         flex: 1,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     topBarTitle: {
-        fontSize: 16,
+        fontSize: 14, // Slightly larger
         fontWeight: '800',
         color: C.brown,
-        flexShrink: 1,
     },
     logoImage: {
-        width: 120,
-        height: 40,
+        width: 150, // Adjust this based on your file's actual shape
+        height: 50,
     },
     topBarAction: {
         alignItems: 'flex-end',
+        justifyContent: 'center',
+        height: '100%', // Makes it easier to tap
     },
     headerBackButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: -10,
+        flexDirection: 'row', // Horizontal layout
+        alignItems: 'center', // Vertical centering
+        marginLeft: -10,      // Nudge left so the icon arrow sits near the edge
     },
     headerBackText: {
         fontSize: 16,
         fontWeight: '600',
         color: C.brown,
-        marginLeft: -6,
+        marginLeft: -6,       // Pull text closer to the icon for a tighter look
     },
 
-    // ── Content ───────────────────────────────────────────────────────────────
+    // ── Content ────────────────────────────────────────────────────────────────
     contentArea: {
         flex: 1,
         overflow: 'hidden',
@@ -1071,7 +617,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 
-    // ── Dashboard ─────────────────────────────────────────────────────────────
+    // ── Dashboard Card Styles ──────────────────────────────────────────────────────
     scrollContent: {
         paddingTop: 80,
         paddingHorizontal: 20,
@@ -1086,15 +632,17 @@ const styles = StyleSheet.create({
     },
     card: {
         backgroundColor: '#FFFFFF',
-        flexDirection: 'row',
+        flexDirection: 'row', // Aligns icon and text horizontally inside the card
         alignItems: 'center',
         padding: 20,
         borderRadius: 20,
         marginBottom: 15,
+        // Shadow for iOS
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
+        // Elevation for Android
         elevation: 4,
     },
     iconWrapper: {
@@ -1106,162 +654,13 @@ const styles = StyleSheet.create({
         marginRight: 15,
     },
     cardText: {
-        flex: 1,
+        flex: 1, // Takes up remaining space
         fontSize: 18,
         fontWeight: '600',
         color: C.orange,
     },
-    subLabel: {
-        fontSize: 12,
-        color: C.mutedText,
-    },
 
-    // ── Orders / Bookings ─────────────────────────────────────────────────────
-    filterContainer: {
-        backgroundColor: C.brown,
-        paddingBottom: 15,
-        paddingTop: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: C.white + '1A',
-    },
-    filterGroup: {
-        marginBottom: 8,
-    },
-    filterLabelRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        gap: 5,
-        marginBottom: 8,
-    },
-    filterGroupLabel: {
-        color: C.white,
-        fontSize: 12,
-        fontWeight: '700',
-        opacity: 0.6,
-        textTransform: 'uppercase',
-    },
-    filterScroll: {
-        paddingHorizontal: 20,
-        gap: 8,
-    },
-    filterChip: {
-        paddingHorizontal: 16,
-        paddingVertical: 6,
-        borderRadius: 20,
-        backgroundColor: C.white + '1A',
-        borderWidth: 1,
-        borderColor: C.white + '1A',
-    },
-    filterChipActive: {
-        backgroundColor: C.orange,
-        borderColor: C.orange,
-    },
-    filterChipText: {
-        color: C.white,
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    filterChipTextActive: {
-        color: C.white,
-    },
-    bookingListContent: {
-        paddingHorizontal: 20,
-        paddingBottom: 120,
-    },
-    sectionHeaderContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 15,
-        marginTop: 25,
-    },
-    sectionTitle: {
-        color: C.white,
-        fontSize: 14,
-        fontWeight: '800',
-        marginHorizontal: 15,
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
-    sectionLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: C.white + '33',
-    },
-    bookingCard: {
-        backgroundColor: C.white,
-        borderRadius: 18,
-        padding: 16,
-        marginBottom: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    bookingInfo: {
-        flex: 1,
-    },
-    bookingHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    bookingCustomer: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: C.brown,
-    },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    statusText: {
-        fontSize: 10,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-    },
-    bookingDetailRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-        gap: 6,
-    },
-    bookingDetailText: {
-        fontSize: 14,
-        color: C.brown + '99',
-        fontWeight: '500',
-    },
-    bookingTimeText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: C.brown,
-    },
-    bookingPriceAction: {
-        alignItems: 'flex-end',
-        gap: 8,
-        marginLeft: 10,
-    },
-    bookingPrice: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: C.orange,
-    },
-    emptyState: {
-        alignItems: 'center',
-        marginTop: 60,
-    },
-    emptyStateText: {
-        color: C.white + '88',
-        fontSize: 16,
-        marginTop: 15,
-    },
-
-    // ── Profile ───────────────────────────────────────────────────────────────
+    // ── Profile ────────────────────────────────────────────────────────────────
     profileHero: {
         alignItems: 'center',
         paddingTop: 32,
@@ -1407,12 +806,13 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
 
-    // ── Bottom nav ────────────────────────────────────────────────────────────
+    // ── Bottom nav ─────────────────────────────────────────────────────────────
     bottomNav: {
         flexDirection: 'row',
         backgroundColor: C.white,
         borderTopWidth: 1,
         borderTopColor: C.border,
+        paddingBottom: Platform.OS === 'ios' ? 20 : 8,
         paddingTop: 8,
         paddingHorizontal: 8,
     },
@@ -1444,181 +844,198 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
 
-    // ── Subscreen ─────────────────────────────────────────────────────────────
-    subScreenContainer: {
+    // ── Orders Screen ─────────────────────────────────────────────────────────────
+
+    rootContainer: {
+        flex: 1,
+        backgroundColor: C.brown,
+    },
+    orderListContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 120,
+    },
+    sectionHeaderContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 15,
+        marginTop: 25,
+    },
+    sectionTitle: {
+        color: C.white,
+        fontSize: 14,
+        fontWeight: '800',
+        marginHorizontal: 15,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    sectionLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: C.white + '33',
+    },
+    orderCard: {
+        backgroundColor: C.white,
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    orderInfo: {
+        flex: 1,
+    },
+    orderHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    customerName: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: C.brown,
+    },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    statusText: {
+        fontSize: 10,
+        fontWeight: '800',
+        textTransform: 'uppercase',
+    },
+    orderDetailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        gap: 6,
+    },
+    orderDetailText: {
+        fontSize: 14,
+        color: C.brown + '99',
+        fontWeight: '500',
+    },
+    categoryText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: C.brown,
+    },
+    orderPriceAction: {
+        alignItems: 'flex-end',
+        gap: 8,
+        marginLeft: 10,
+    },
+    orderPrice: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: C.orange,
+    },
+    filterContainer: {
+        backgroundColor: C.brown,
+        paddingBottom: 15,
+        paddingTop: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: C.white + '1A',
+    },
+    filterGroup: {
+        marginBottom: 8,
+    },
+    filterLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        gap: 5,
+        marginBottom: 8,
+    },
+    filterGroupLabel: {
+        color: C.white,
+        fontSize: 12,
+        fontWeight: '700',
+        opacity: 0.6,
+        textTransform: 'uppercase',
+    },
+    filterScroll: {
+        paddingHorizontal: 20,
+        gap: 8,
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 20,
+        backgroundColor: C.white + '1A',
+        borderWidth: 1,
+        borderColor: C.white + '1A',
+    },
+    filterChipActive: {
+        backgroundColor: C.orange,
+        borderColor: C.orange,
+    },
+    filterChipText: {
+        color: C.white,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    filterChipTextActive: {
+        color: C.white,
+    },
+    emptyState: {
+        alignItems: 'center',
+        marginTop: 60,
+    },
+    emptyStateText: {
+        color: C.white + '88',
+        fontSize: 16,
+        marginTop: 15,
+    },
+
+    // ── Subscreen ──────────────────────────────────────────────────────────
+
+    formContainer: {
         flex: 1,
         backgroundColor: C.white,
     },
-    subScreenHeader: {
+    formHeader: {
         padding: 20,
         borderBottomWidth: 1,
         borderBottomColor: C.border,
-        backgroundColor: C.brown,
+        backgroundColor: C.bg + '33',
     },
-    subScreenTitle: {
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+        gap: 5,
+    },
+    backText: {
+        color: C.brown,
+        fontWeight: '600',
+    },
+    formTitle: {
         fontSize: 22,
         fontWeight: '800',
         color: C.orange,
     },
-
-    // ── Forms ─────────────────────────────────────────────────────────────────
-    formContainer: {
-        flex: 1,
-        backgroundColor: 'transparent',
-    },
     formScroll: {
         padding: 20,
-        paddingBottom: 10,
     },
-    sectionLabel: {
-        fontSize: 13,
-        fontWeight: '800',
-        color: C.brown,
-        marginBottom: 10,
-        textTransform: 'uppercase',
-    },
-    imagePickerFrame: {
-        width: '100%',
-        height: 180,
-        borderRadius: 16,
-        backgroundColor: C.bg,
-        borderWidth: 2,
-        borderColor: C.border,
-        borderStyle: 'dashed',
-        overflow: 'hidden',
-        marginBottom: 25,
-    },
-    previewImage: {
-        width: '100%',
-        height: '100%',
-    },
-    imagePlaceholder: {
-        flex: 1,
+    placeholderForm: {
         justifyContent: 'center',
-        alignItems: 'center',
-    },
-    galleryContainer: {
-        flexDirection: 'row',
-        marginBottom: 20,
-    },
-    galleryWrapper: {
-        position: 'relative',
-        marginRight: 12,
-    },
-    galleryImage: {
-        width: 100,
-        height: 100,
-        borderRadius: 12,
-        backgroundColor: '#eee',
-    },
-    removeIcon: {
-        position: 'absolute',
-        top: -5,
-        right: -5,
-        backgroundColor: 'white',
-        borderRadius: 12,
-        marginTop: 4,
-        marginRight: 4,
-    },
-    addGalleryButton: {
-        width: 100,
-        height: 100,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: '#ccc',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: C.bg,
-    },
-    inputGroup: {
-        marginBottom: 20,
-    },
-    label: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: C.brown,
-        marginBottom: 8,
-    },
-    input: {
-        backgroundColor: '#F8F9FA',
-        borderWidth: 1,
-        borderColor: C.border,
-        borderRadius: 12,
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        fontSize: 16,
-        color: C.brown,
+        paddingTop: 10,
     },
     placeholderText: {
-        color: C.brown + '66',
-        fontWeight: '500',
-    },
-    rowBetweenCompact: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 10,
-        marginBottom: 20,
-    },
-    dropdownHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#F8F9FA',
-        borderWidth: 1,
-        borderColor: C.border,
-        borderRadius: 12,
-        padding: 15,
-    },
-    dropdownHeaderText: {
-        color: C.brown,
-        fontWeight: '600',
-    },
-    dropdownList: {
-        marginTop: 5,
-        backgroundColor: '#F8F9FA',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: C.border,
-        overflow: 'hidden',
-    },
-    sportItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: C.border,
-    },
-    sportItemActive: {
-        backgroundColor: C.orange,
-    },
-    sportItemText: {
-        color: C.brown,
-        fontWeight: '500',
-    },
-    sportItemTextActive: {
-        color: C.white,
-        fontWeight: '700',
-    },
-    saveButton: {
-        backgroundColor: C.brown,
-        borderRadius: 14,
-        paddingVertical: 16,
-        alignItems: 'center',
-        elevation: 4,
-        marginTop: 10,
-    },
-    saveButtonDisabled: {
-        opacity: 0.7,
-    },
-    saveButtonText: {
-        color: '#FFF',
+        marginTop: 20,
         fontSize: 16,
-        fontWeight: '800',
+        color: C.mutedText,
+        textAlign: 'center',
     },
     submitBtn: {
-        marginTop: 12,
+        marginTop: 40,
         backgroundColor: C.brown,
         paddingHorizontal: 40,
         paddingVertical: 15,
@@ -1630,26 +1047,6 @@ const styles = StyleSheet.create({
         color: C.white,
         fontWeight: 'bold',
         fontSize: 16,
-    },
-    errorBox: {
-        marginTop: 8,
-        marginBottom: 10,
-        backgroundColor: '#FFF0EB',
-        borderLeftWidth: 4,
-        borderLeftColor: C.orange,
-        borderRadius: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-    },
-    errorText: {
-        color: C.orange,
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    bookingDetailText: {
-        fontSize: 16,
-        color: C.brown,
-        marginBottom: 4,
     },
 });
 
